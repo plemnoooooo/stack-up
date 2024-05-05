@@ -5,4 +5,4 @@ import Game from "./Game";
 
 eruda.init();
 
-new Game();
+window.addEventListener("DOMContentLoaded", () => new Game());

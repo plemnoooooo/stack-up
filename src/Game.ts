@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import $ from "jquery";
-import { Block } from "./meshes";
-import { clampOutside } from "./utils";
+import { clampOutside, getMeshSides, roundToNearest } from "./utils";
 
 export default class Game {
     static readonly CANVAS_ID = "game-canvas";
@@ -11,14 +10,36 @@ export default class Game {
     static readonly NEAR = 0.1;
     static readonly FAR = 1000;
 
-    static readonly CAMERA_TRANSLATION = 20;
-    static readonly CAMERA_TRANSLATION_Y = 30;
+    static readonly CAMERA_X = 24;
+    static readonly CAMERA_Z = 24;
+    static readonly CAMERA_GAME_OVER_Z = -60;
+    static readonly CAMERA_TRANSLATION_Y = 36;
     static readonly CAMERA_DAMPING = 6;
 
+    static readonly LIGHT_X = 20;
+    static readonly LIGHT_Z = 20;
+    static readonly LIGHT_TRANSLATION_Y = 60;
+
+    static readonly BLOCK_STARTING_WIDTH = 10;
+    static readonly BLOCK_STARTING_DEPTH = 10;
+    static readonly BLOCK_HEIGHT = 1;
+    static readonly BLOCK_COLOR = 0xf0f0f0;
+
+    static readonly FIX_POSITION_VALUE = 0.2;
+    static readonly STARTING_MOVE_SPEED = 0.1;
+    static readonly MAX_MOVE_SPEED = 0.4;
+    static readonly MOVE_SPEED_DECREASE = 0.2;
+    static readonly MOVE_SPEED_DECREASE_INTERVAL = 8;
+    static readonly MOVE_DAMPING = 18;
+    static readonly FALL_SPEED = 0.1;
+    static readonly VISIBILITY_DECREASE = 0.04;
+
     static readonly BACKGROUND_COLOR = 0x72bed6;
-    static readonly GRAVITY = 0.1;
     static readonly KEY_TO_STACK_BLOCK = " ";
 
+    gameOver: boolean;
+    movement: number;
+    
     canvas!: JQuery<HTMLCanvasElement>;
     score!: JQuery<HTMLParagraphElement>;
 
@@ -29,16 +50,13 @@ export default class Game {
     ambientLight!: THREE.AmbientLight;
     directionalLight!: THREE.DirectionalLight;
 
-    gameOver: boolean;
-    movement: number;
+    blocks: THREE.Mesh<THREE.BoxGeometry, THREE.MeshLambertMaterial>[];
+    movingBlock!: THREE.Mesh<THREE.BoxGeometry, THREE.MeshLambertMaterial>;
+    cutOffBlock!: THREE.Mesh<THREE.BoxGeometry, THREE.MeshLambertMaterial>;
 
-    blocks: Block[];
-    movingBlock!: Block;
-    cutOffBlock!: Block;
-    
     constructor() {
-        this.movement = 0;
         this.gameOver = false;
+        this.movement = 0;
         this.blocks = [];
 
         this.init();
@@ -63,29 +81,30 @@ export default class Game {
         this.ambientLight = new THREE.AmbientLight();
         this.directionalLight = new THREE.DirectionalLight();
 
-        this.camera.position.set(Game.CAMERA_TRANSLATION, Game.CAMERA_TRANSLATION_Y,Game.CAMERA_TRANSLATION);
+        this.camera.position.set(Game.CAMERA_X, Game.CAMERA_TRANSLATION_Y, Game.CAMERA_Z);
         this.camera.lookAt(new THREE.Vector3());
-        this.camera.userData.targetY = 1;
+        this.camera.userData.targetY = Game.BLOCK_HEIGHT;
+        this.camera.userData.targetZ = Game.CAMERA_Z;
 
-        this.directionalLight.position.set(20, 60, 20);
+        this.directionalLight.position.set(Game.LIGHT_X, Game.LIGHT_TRANSLATION_Y, Game.LIGHT_Z);
         this.directionalLight.lookAt(new THREE.Vector3());
 
         this.scene.add(this.ambientLight, this.directionalLight);
 
-        const startingBlock = new Block(Block.STARTING_WIDTH, Block.STARTING_DEPTH);
+        const startingBlock = this.createBlock(Game.BLOCK_STARTING_WIDTH, Game.BLOCK_STARTING_DEPTH);
         this.blocks.push(startingBlock);
 
-        this.movingBlock = new Block(0, 0);
+        this.movingBlock = this.createBlock(0, 0);
+        this.movingBlock.userData.speed = Game.STARTING_MOVE_SPEED;
         this.resetMovingBlock();
 
-        this.cutOffBlock = new Block(0, 0);
+        this.cutOffBlock = this.createBlock(0, 0);
         this.cutOffBlock.material.opacity = 0;
         this.cutOffBlock.material.transparent = true;
-        this.cutOffBlock.userData.velocity = 0;
 
         this.scene.add(startingBlock, this.movingBlock, this.cutOffBlock);
 
-        $(window).on("keydown pointerdown", ({ type, key }) => !this.gameOver && !((type === "keydown") && (key !== Game.KEY_TO_STACK_BLOCK)) && this.stackNewBlock());
+        $(window).on("keydown pointerdown", ({ type, key }) => !this.gameOver && !((type === "keydown") && (key !== Game.KEY_TO_STACK_BLOCK)) && this.stackBlock());
     }
 
     animate() {
@@ -93,56 +112,56 @@ export default class Game {
         this.updateCutOffBlock();
 
         this.camera.position.y += ((this.camera.userData.targetY + Game.CAMERA_TRANSLATION_Y) - this.camera.position.y) / Game.CAMERA_DAMPING;
-        
+        this.camera.position.z += 1.6 * Math.sin((Math.PI / ((Game.CAMERA_Z - Game.CAMERA_GAME_OVER_Z) * 1.01)) * (this.camera.userData.targetZ - this.camera.position.z));
+
         this.renderer.render(this.scene, this.camera);
         requestAnimationFrame(this.animate.bind(this));
     }
 
     reset() {
+        this.gameOver = false;
         this.movement = 0;
 
         const removedBlocks = this.blocks.splice(1);
         this.scene.remove(...removedBlocks);
-        
+
         this.movingBlock.visible = true;
         this.resetMovingBlock();
     }
 
-    stackNewBlock() {
+    stackBlock() {
         const {
             left: l1,
             right: r1,
             front: f1,
             back: b1
-        } = this.movingBlock.getSidePositions();
+        } = getMeshSides(this.movingBlock);
 
         const {
-            top: y,
             left: l2,
             right: r2,
             front: f2,
             back: b2
-        } = this.blocks.slice(-1)[0].getSidePositions();
+        } = getMeshSides(this.blocks.slice(-1)[0]);
 
         const left = THREE.MathUtils.clamp(l1, l2, r2);
         const right = THREE.MathUtils.clamp(r1, l2, r2);
         const front = THREE.MathUtils.clamp(f1, b2, f2);
         const back = THREE.MathUtils.clamp(b1, b2, f2);
-        
+
         const width = right - left;
         const depth = front - back;
 
         this.resetCutOffBlock();
-        
+
         if ([width, depth].some((val) => val <= 0)) {
-            this.movingBlock.visible = false;
-            this.gameOver = true;
+            this.stop();
 
             return;
         };
 
-        const block = new Block(width, depth);
-        block.setPosition(left, y, back);
+        const block = this.createBlock(width, depth);
+        this.moveBlock(block, left, this.movingBlock.position.y, back);
         this.blocks.push(block);
         this.scene.add(block);
 
@@ -153,6 +172,7 @@ export default class Game {
         this.score.html(`${+this.score.html()! + scoreIncrement}`);
 
         this.camera.userData.targetY = this.movingBlock.position.y;
+        this.directionalLight.position.y = this.movingBlock.position.y + Game.LIGHT_TRANSLATION_Y;
     }
 
     updateMovingBlock() {
@@ -163,65 +183,98 @@ export default class Game {
 
         const isZMoving = !!(this.movement & 2);
         const moveMultiplier = (~this.movement & 1) || -1;
-        const moveStep = Block.MOVE_STEP * moveMultiplier;
+        const moveStep = this.movingBlock.userData.speed * moveMultiplier;
 
-        this.movingBlock.setPosition(x + (moveStep * +!isZMoving), y, z + (moveStep * +isZMoving));
+        this.movingBlock.position.set(x + (moveStep * +!isZMoving), y, z + (moveStep * +isZMoving));
     }
 
     resetMovingBlock() {
         const isZMoving = !!(this.movement & 2);
         const moveMultiplier = (this.movement & 1) || -1;
-        
-        const topMostBlock = this.blocks.slice(-1)[0];
-        const { x, y, z } = topMostBlock.position;
-        const { width, depth } = topMostBlock.geometry.parameters;
-        
-        this.movingBlock.setPosition(isZMoving ? x : moveMultiplier * 10, y + Block.HEIGHT, isZMoving ? moveMultiplier * 10 : z);
-        
-        const newGeometry = new THREE.BoxGeometry(width, Block.HEIGHT, depth);
-        this.movingBlock.geometry.copy(newGeometry);
-        this.movingBlock.geometry.translate(width / 2, 0, depth / 2);
+
+        const { left, right, back, front } = getMeshSides(this.blocks.slice(-1)[0]);
+        const width = right - left;
+        const depth = front - back;
+
+        this.moveBlock(this.movingBlock, isZMoving ? left : moveMultiplier * Game.BLOCK_STARTING_WIDTH, this.movingBlock.position.y + Game.BLOCK_HEIGHT, isZMoving ? moveMultiplier * Game.BLOCK_STARTING_DEPTH : back);
+        this.resizeBlock(this.movingBlock, width, depth);
+
+        this.movingBlock.userData.speed += (Game.MAX_MOVE_SPEED - this.movingBlock.userData.speed) / Game.MOVE_DAMPING;
+        this.movingBlock.userData.speed /= 1 + (+!(this.movingBlock.position.y % Game.MOVE_SPEED_DECREASE_INTERVAL) * Game.MOVE_SPEED_DECREASE);
     }
 
     updateCutOffBlock() {
         if (this.cutOffBlock.material.opacity <= 0) return;
-        
-        this.cutOffBlock.userData.velocity -= Game.GRAVITY;
-        this.cutOffBlock.position.y += this.cutOffBlock.userData.velocity;
-        
-        this.cutOffBlock.material.opacity += Block.OPACITY_STEP;
-        this.cutOffBlock.material.needsUpdate = true;
+        this.cutOffBlock.position.y -= Game.FALL_SPEED;
+        this.cutOffBlock.material.opacity -= Game.VISIBILITY_DECREASE;
     }
 
     resetCutOffBlock() {
+        const isZMoving = !!(this.movement & 2);
+
         const {
             left: l1,
             right: r1,
             front: f1,
             back: b1
-        } = this.movingBlock.getSidePositions();
+        } = getMeshSides(this.movingBlock);
 
         const {
             left: l2,
             right: r2,
-            bottom: y,
             front: f2,
             back: b2
-        } = this.blocks.slice(-1)[0].getSidePositions();
+        } = getMeshSides(this.blocks.slice(-1)[0]);
 
         const left = clampOutside(l1, l2, r2);
         const right = clampOutside(r1, l2, r2, true);
         const front = clampOutside(f1, b2, f2, true);
         const back = clampOutside(b1, b2, f2);
 
-        const width = right - left;
-        const depth = front - back;
+        const width = isZMoving ? this.movingBlock.geometry.parameters.width : right - left;
+        const depth = isZMoving ? front - back : this.movingBlock.geometry.parameters.depth;
 
-        this.cutOffBlock.setPosition(left, y, back);
-        this.cutOffBlock.userData.velocity = 0;
-        
-        this.cutOffBlock.geometry.copy(new THREE.BoxGeometry(width, Block.HEIGHT, depth));
+        this.moveBlock(this.cutOffBlock, isZMoving ? this.movingBlock.position.x : left, this.movingBlock.position.y, isZMoving ? back : this.movingBlock.position.z);
+        this.resizeBlock(this.cutOffBlock, width, depth);
+
         this.cutOffBlock.material.opacity = 1;
+    }
+
+    createBlock(width: number, depth: number) {
+        width = roundToNearest(width, Game.FIX_POSITION_VALUE);
+        depth = roundToNearest(depth, Game.FIX_POSITION_VALUE);
+
+        const geometry = new THREE.BoxGeometry(width, Game.BLOCK_HEIGHT, depth);
+        const material = new THREE.MeshLambertMaterial({ color: Game.BLOCK_COLOR });
+
+        geometry.translate(width / 2, 0, depth / 2);
+
+        return new THREE.Mesh(geometry, material);
+    }
+
+    moveBlock(block: THREE.Mesh, x: number, y: number, z: number) {
+        x = roundToNearest(x, Game.FIX_POSITION_VALUE);
+        y = roundToNearest(y, Game.FIX_POSITION_VALUE);
+        z = roundToNearest(z, Game.FIX_POSITION_VALUE);
+
+        block.position.set(x, y, z);
+    }
+
+    resizeBlock(block: THREE.Mesh, width: number, depth: number) {
+        width = roundToNearest(width, Game.FIX_POSITION_VALUE);
+        depth = roundToNearest(depth, Game.FIX_POSITION_VALUE);
+
+        block.geometry.copy(new THREE.BoxGeometry(width, Game.BLOCK_HEIGHT, depth));
+        block.geometry.translate(width / 2, 0, depth / 2);
+    }
+
+    stop() {
+        this.gameOver = true;
+        this.movingBlock.visible = false;
+
+        setTimeout(() => {
+            this.camera.userData.targetZ = Game.CAMERA_GAME_OVER_Z;
+        }, 2000);
     }
 
     onResize() {
