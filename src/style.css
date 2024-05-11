@@ -1,6 +1,16 @@
 @font-face {
     font-family: "Quicksand";
-    src: url("static/fonts/Quicksand-Regular.ttf");
+    src: url("static/fonts/Quicksand-Bold.ttf");
+}
+
+* * {
+    font-family: "Quicksand";
+    color: white;
+    text-transform: uppercase;
+
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
 }
 
 html,
@@ -9,31 +19,112 @@ body {
 
     margin: 0;
     padding: 0;
-
-    user-select: none;
-    touch-action: none;
 }
 
-#ui {
+#game-canvas {
     position: absolute;
-    top: 0;
-    left: 0;
+    z-index: -10;
+}
 
-    width: 100%;
-    height: 100%;
+#start-menu > img {
+    display: block;
+    object-fit: contain;
+    margin: 8vh auto;
 
-    z-index: 10;
+    width: 60vw;
+    height: 16vh;
+}
+
+#start-menu > p {
+    display: block;
+    margin: 48vh auto;
+
+    width: 72vw;
+
+    font-size: 1.2rem;
+    text-align: center;
 }
 
 #score {
+    display: none;
     position: absolute;
     top: 10%;
     left: 50%;
 
-    font-family: "Quicksand";
     font-size: 2rem;
-    font-weight: 600;
-    -webkit-text-fill-color: white;
+
+    opacity: 0;
 
     transform: translateX(-50%);
+}
+
+#end-menu {
+    display: none;
+
+    flex-direction: column;
+    gap: 0.4rem;
+
+    padding: 1rem 0;
+
+    opacity: 0;
+}
+
+#leaderboard {
+    display: block;
+
+    margin: auto;
+
+    width: 80vw;
+    height: 48vh;
+
+    border-color: white;
+    border-radius: 4rem;
+    border-style: solid;
+    border-width: 0.24rem;
+}
+
+#score-texts {
+    display: block;
+
+    text-align: center;
+}
+
+#score-texts > p {
+    margin: 0.6rem;
+
+    font-size: 1.2rem;
+}
+
+#final-score {
+    margin: 1.5rem;
+
+    font-size: 3rem;
+}
+
+#reset {
+    display: block;
+    
+    margin: 0 auto;
+
+    width: 12rem;
+    height: 4rem;
+
+    font-family: "Quicksand";
+    font-size: 1.2rem;
+    text-transform: uppercase;
+
+    background-color: transparent;
+    
+    border-color: white;
+    border-radius: 2rem;
+    border-style: solid;
+    border-width: 0.24rem;
+}
+
+#repository-link {
+    margin: 0.2rem;
+
+    font-size: 0.8rem;
+    text-align: center;
+    text-decoration-line: none;
 }
