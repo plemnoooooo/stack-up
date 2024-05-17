@@ -8,6 +8,7 @@
     color: white;
     text-transform: uppercase;
 
+    pointer-events: none;
     user-select: none;
     -webkit-user-select: none;
     touch-action: none;
@@ -21,39 +22,101 @@ body {
     padding: 0;
 }
 
-#game-canvas {
+body > div {
     position: absolute;
-    z-index: -10;
+    z-index: 10;
+
+    width: 100%;
+    height: 100%;
 }
 
-#start-menu > img {
-    display: block;
-    object-fit: contain;
-    margin: 8vh auto;
+#canvas {
+    position: absolute;
 
-    width: 60vw;
-    height: 16vh;
-}
-
-#start-menu > p {
-    display: block;
-    margin: 48vh auto;
-
-    width: 72vw;
-
-    font-size: 1.2rem;
-    text-align: center;
+    pointer-events: all;
 }
 
 #score {
     display: none;
     position: absolute;
-    top: 10%;
+    top: min(8%, 4rem);
     left: 50%;
 
-    font-size: 2rem;
+    font-size: min(4.2vh, 2.1rem);
 
     opacity: 0;
+
+    transform: translateX(-50%);
+}
+    
+#start-menu > img {
+    position: absolute;
+    top: min(8%, 4rem);
+    left: 50%;
+
+    object-fit: contain;
+
+    width: min(72%, 21.6rem);
+    height: min(18%, 9rem);
+
+    transform: translateX(-50%);
+}
+
+#start-menu > div {
+    display: flex;
+    position: absolute;
+    bottom: min(20%, 10rem);
+    left: 50%;
+
+    flex-direction: column;
+    gap: min(1.2vh, 0.6rem);
+
+    text-align: center;
+
+    transform: translateX(-50%);
+}
+
+#start-menu > div > p {
+    height: 0;
+
+    font-size: min(1.6vh, 0.8rem);
+}
+
+#name {
+    width: min(44vw, 13.2rem);
+    height: min(4.8vh, 2.4rem);
+
+    background-color: transparent;
+
+    font-size: min(2.4vh, 1.2rem);
+    text-align: center;
+    
+    border-color: white;
+    border-radius: 9999px;
+    border-style: solid;
+    border-width: 0.24rem;
+
+    caret-color: white;
+    pointer-events: all;
+}
+
+#name:focus {
+    outline-style: none;
+}
+
+#name::placeholder {
+    color: white;
+}
+
+#start-menu > p {
+    position: absolute;
+    bottom: min(8%, 4rem);
+    left: 50%;
+
+    width: min(80%, 24rem);
+
+    font-size: min(1.8vh, 0.9rem);
+    text-align: center;
 
     transform: translateX(-50%);
 }
@@ -61,70 +124,115 @@ body {
 #end-menu {
     display: none;
 
-    flex-direction: column;
-    gap: 0.4rem;
-
-    padding: 1rem 0;
-
     opacity: 0;
 }
 
 #leaderboard {
-    display: block;
+    overflow: scroll;
+    position: absolute;
+    top: min(8%, 4rem);
+    left: 50%;
 
-    margin: auto;
-
-    width: 80vw;
-    height: 48vh;
+    width: min(72%, 21.6rem);
+    height: min(56%, 28rem);
 
     border-color: white;
-    border-radius: 4rem;
+    border-radius: min(3.2vh, 1.6rem);
     border-style: solid;
     border-width: 0.24rem;
+
+    pointer-events: all;
+
+    transform: translateX(-50%);
+}
+
+#leaderboard::-webkit-scrollbar{
+    display: none;
+}
+
+#leaderboard > div {
+    display: flex;
+
+    flex-direction: row;
+    justify-content: space-between;
+
+    padding: 0 min(2vw, 0.6rem);
+
+    width: min(68vw, 20.4rem);
+    height: min(6vh, 3rem);
+
+    text-anchor: middle;
+}
+
+#leaderboard > div > p {
+    height: 0;
+
+    font-size: min(3.6vh, 1.8rem);
+}
+
+#leaderboard > div > h1 {
+    height: 0;
+
+    font-size: min(3.6vh, 1.8rem);
 }
 
 #score-texts {
-    display: block;
+    display: flex;
+    position: absolute;
+    bottom: min(24%, 12rem);
+    left: 50%;
+
+    flex-direction: column;
+
+    height: min(9.6vh, 4.8rem);
 
     text-align: center;
+
+    transform: translateX(-50%);
 }
 
 #score-texts > p {
-    margin: 0.6rem;
+    height: 0;
 
-    font-size: 1.2rem;
+    font-size: min(2.4vh, 1.2rem);
 }
 
 #final-score {
-    margin: 1.5rem;
+    height: 0;
 
-    font-size: 3rem;
+    font-size: min(6vh, 3rem);
 }
 
 #reset {
-    display: block;
-    
-    margin: 0 auto;
+    position: absolute;
+    bottom: min(10%, 3rem);
+    left: 50%;
 
-    width: 12rem;
-    height: 4rem;
+    width: min(36%, 10.8rem);
+    height: min(7.2%, 3.6rem);
 
     font-family: "Quicksand";
-    font-size: 1.2rem;
+    font-size: min(2.1vh, 1.05rem);
     text-transform: uppercase;
 
     background-color: transparent;
-    
+
     border-color: white;
-    border-radius: 2rem;
+    border-radius: 9999px;
     border-style: solid;
     border-width: 0.24rem;
+
+    pointer-events: all;
+
+    transform: translateX(-50%);
 }
 
 #repository-link {
-    margin: 0.2rem;
+    position: absolute;
+    bottom: 0;
+    left: 0;
 
-    font-size: 0.8rem;
+    font-size: min(1.6%, 0.8rem);
     text-align: center;
     text-decoration-line: none;
 }

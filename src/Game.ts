@@ -1,64 +1,57 @@
 import * as THREE from "three";
 import $ from "jquery";
-import { clampOutside, getMeshSides, roundToNearest } from "./utils";
+import { createClient } from "@supabase/supabase-js";
+
+import { BLOCKS, CAMERA, LIGHTS } from "./constants";
+import { Supabase, Leaderboard } from "./types";
+import { StartMenu, EndMenu } from "./ui";
+import { clampOutside, roundToNearest } from "./utils";
+import Block from "./Block";
 
 export default class Game {
-    static readonly FOV = 60;
-    static readonly NEAR = 0.1;
-    static readonly FAR = 1000;
+    static readonly CANVAS_ID = "#canvas"
+    static readonly SCORE_ID = "#score";
 
-    static readonly CAMERA_X = 24;
-    static readonly CAMERA_Z = 24;
-    static readonly CAMERA_GAME_OVER_Z = -60;
-    static readonly CAMERA_TRANSLATION_Y = 36;
-    static readonly CAMERA_DAMPING = 6;
-
-    static readonly LIGHT_X = 20;
-    static readonly LIGHT_Z = 20;
-    static readonly LIGHT_TRANSLATION_Y = 60;
-
-    static readonly BLOCK_STARTING_WIDTH = 10;
-    static readonly BLOCK_STARTING_DEPTH = 10;
-    static readonly BLOCK_HEIGHT = 1;
-    static readonly BLOCK_COLOR = 0xf0f0f0;
-
-    static readonly FIX_POSITION_VALUE = 0.2;
-    static readonly STARTING_MOVE_SPEED = 0.1;
-    static readonly MAX_MOVE_SPEED = 0.4;
-    static readonly MOVE_SPEED_DECREASE = 0.2;
-    static readonly MOVE_SPEED_DECREASE_INTERVAL = 8;
-    static readonly MOVE_DAMPING = 18;
-    static readonly FALL_SPEED = 0.1;
-    static readonly VISIBILITY_DECREASE = 0.04;
-
+    static readonly SUPABASE_URL = "https://aekozqymnjeaaxfcppmt.supabase.co/";
     static readonly BACKGROUND_COLOR = 0x72bed6;
     static readonly KEY_TO_STACK_BLOCK = " ";
 
-    static readonly HOVER_DURATION = 300;
-    static readonly FINAL_SCORE_DELAY = 400;
-    static readonly FADE_DURATION = 800;
-    static readonly FADE_DELAY = 400;
-    static readonly END_SCREEN_FADE_IN = 800;
-    static readonly STOP_GAME_DELAY = 2000;
+    static readonly ZERO_ERROR_VALUE = 1 ** -5;
+    static readonly STOP_GAME_DELAY = 1800;
+    static readonly SCORE_FADE_DURATION = 480;
+    static readonly SCORE_FADE_IN_DELAY = 400;
+    static readonly SCORE_FADE_OUT_DELAY = 120;
 
     gameOver: boolean;
     movement: number;
     score: number;
 
+    canvas!: JQuery<HTMLCanvasElement>;
+    scoreElement!: JQuery<HTMLParagraphElement>;
+    startMenu!: StartMenu;
+    endMenu!: EndMenu;
+
     scene!: THREE.Scene;
     renderer!: THREE.WebGLRenderer;
+    supabase!: Supabase;
 
     camera!: THREE.PerspectiveCamera;
     ambientLight!: THREE.AmbientLight;
     directionalLight!: THREE.DirectionalLight;
 
-    blocks: THREE.Mesh<THREE.BoxGeometry, THREE.MeshLambertMaterial>[];
-    movingBlock!: THREE.Mesh<THREE.BoxGeometry, THREE.MeshLambertMaterial>;
-    cutOffBlock!: THREE.Mesh<THREE.BoxGeometry, THREE.MeshLambertMaterial>;
+    blocks: Block[];
+    movingBlock!: Block;
+    cutOffBlock!: Block;
 
     constructor() {
         this.gameOver = false;
-        this.movement = 0;
+
+        /** number of bits (small endian) | meaning
+         * 1                              | axis (x, z)
+         * 1                              | direction (+, -)
+         */
+        this.movement = THREE.MathUtils.randInt(0b00, 0b11);
+
         this.score = 0;
         this.blocks = [];
 
@@ -67,93 +60,71 @@ export default class Game {
     }
 
     init() {
+        this.canvas = $(Game.CANVAS_ID);
+        this.scoreElement = $(Game.SCORE_ID);
+        this.startMenu = new StartMenu();
+        this.endMenu = new EndMenu();
+
         this.scene = new THREE.Scene();
-        this.renderer = new THREE.WebGLRenderer({ canvas: $("#game-canvas")[0] });
+        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas[0] });
+        this.supabase = createClient(Game.SUPABASE_URL, import.meta.env.VITE_SUPABASE_KEY);
 
         const backgroundColor = new THREE.Color(Game.BACKGROUND_COLOR);
         this.scene.background = backgroundColor;
-        $(document.body).css("background-color", `#${backgroundColor.getHexString()}`);
+        $("html, body").css("background-color", backgroundColor.getHexString());
 
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         $(window).on("resize", this.resize.bind(this));
 
-        this.camera = new THREE.PerspectiveCamera(Game.FOV, window.innerWidth / window.innerHeight, Game.NEAR, Game.FAR);
-        this.ambientLight = new THREE.AmbientLight();
-        this.directionalLight = new THREE.DirectionalLight();
+        this.camera = new THREE.PerspectiveCamera(CAMERA.FOV, window.innerWidth / window.innerHeight, CAMERA.NEAR, CAMERA.FAR);
+        this.ambientLight = new THREE.AmbientLight(LIGHTS.AMBIENT.COLOR, LIGHTS.AMBIENT.INTENSITY);
+        this.directionalLight = new THREE.DirectionalLight(LIGHTS.DIRECTIONAL.COLOR, LIGHTS.DIRECTIONAL.INTENSITY);
 
-        this.camera.position.set(Game.CAMERA_X, Game.CAMERA_TRANSLATION_Y, Game.CAMERA_Z);
-        this.camera.lookAt(Game.BLOCK_STARTING_WIDTH / 2, Game.BLOCK_HEIGHT, Game.BLOCK_STARTING_DEPTH / 2);
-        this.camera.userData.targetY = Game.BLOCK_HEIGHT;
-        this.camera.userData.targetZ = Game.CAMERA_Z;
+        this.camera.userData.destination = new THREE.Vector3(CAMERA.X, 0, CAMERA.Z);
+        this.camera.position.copy(this.camera.userData.destination).y = CAMERA.TRANSLATION_Y;
+        this.camera.lookAt(Block.STARTING_WIDTH / 2, Block.HEIGHT, Block.STARTING_DEPTH / 2);
 
-        this.directionalLight.position.set(Game.LIGHT_X, Game.LIGHT_TRANSLATION_Y, Game.LIGHT_Z);
-        this.directionalLight.lookAt(new THREE.Vector3());
+        this.directionalLight.position.set(LIGHTS.DIRECTIONAL.X, LIGHTS.DIRECTIONAL.TRANSLATION_Y, LIGHTS.DIRECTIONAL.Z);
+        this.directionalLight.lookAt(new THREE.Vector3(Block.STARTING_WIDTH / 2, Block.HEIGHT, Block.STARTING_DEPTH / 2));
 
         this.scene.add(this.ambientLight, this.directionalLight);
 
-        const startingBlock = this.createBlock(Game.BLOCK_STARTING_WIDTH, Game.BLOCK_STARTING_DEPTH);
+        const startingBlock = Block.createStartingBlock();
         this.blocks.push(startingBlock);
 
-        this.movingBlock = this.createBlock(0, 0);
-        this.movingBlock.userData.speed = Game.STARTING_MOVE_SPEED;
+        this.movingBlock = Block.createStartingBlock();
         this.resetMovingBlock();
+        this.movingBlock.userData.speed = BLOCKS.MOVING.STARTING_SPEED;
 
-        this.cutOffBlock = this.createBlock(0, 0);
+        this.cutOffBlock = new Block(0, 0);
         this.cutOffBlock.material.opacity = 0;
         this.cutOffBlock.material.transparent = true;
 
         this.scene.add(startingBlock, this.movingBlock, this.cutOffBlock);
 
-        $(window).on("keydown pointerdown", ({ type, key }) => {
-            if (this.gameOver || ((type === "keydown") && (key !== Game.KEY_TO_STACK_BLOCK))) return;
-            this.stackBlock();
-
-            ($("#start-menu").css("opacity") === "1") && this.fadeWhenFirst();
+        $(window).on("keydown", ({ key, preventDefault }) => {
+            (key === Game.KEY_TO_STACK_BLOCK) && this.stackBlock();
+            preventDefault();
         });
 
-        $("#final-score").data({
-            showScore: false,
-            unrounded: 0
-        });
+        this.canvas.on("pointerdown", this.stackBlock.bind(this));
 
-        $("#reset").on("click", () => {
-            this.gameOver && this.reset();
-        }).on("pointerover", function () {
-            $(this).stop(true).css({
-                color: `#${Game.BACKGROUND_COLOR.toString(16)}`,
-                backgroundColor: "white"
-            }).animate({
-                width: "12.8rem",
-                height: "4.2rem",
-
-                borderRadius: "2.1rem",
-            }, 300);
-        }).on("pointerout", function () {
-            $(this).stop(true).css({
-                color: "white",
-                backgroundColor: "transparent"
-            }).animate({
-                width: "12rem",
-                height: "4rem",
-
-                borderRadius: "2rem"
-            }, 300);
-        });
+        this.endMenu.resetButton.on("click", () => this.gameOver && this.reset());
     }
 
     animate() {
         this.updateMovingBlock();
         this.updateCutOffBlock();
 
-        this.camera.position.y += ((this.camera.userData.targetY + Game.CAMERA_TRANSLATION_Y) - this.camera.position.y) / Game.CAMERA_DAMPING;
-        this.camera.position.z += 1.6 * Math.sin((Math.PI / ((Game.CAMERA_Z - Game.CAMERA_GAME_OVER_Z) * 1.01)) * (this.camera.userData.targetZ - this.camera.position.z));
+        this.camera.position.y += ((this.camera.userData.destination.y + CAMERA.TRANSLATION_Y) - this.camera.position.y) / CAMERA.DAMPING;
 
-        const unroundedScore = $("#final-score").data("unrounded");
-        $("#final-score").data("show-score") && $("#final-score").data("unrounded", unroundedScore + ((this.score / 30) * Math.sin(Math.PI / (this.score * 1.01) * (this.score - unroundedScore)))).text(Math.floor(roundToNearest($("#final-score").data("unrounded"), 0.1)));
-        $("#final-score").data("show-score") && console.log(unroundedScore)
+        // formula: MOVE_AMPLITUDE * sin((pi / ((target - start) * POSITION_MULTIPLIER)) * (target - current)), start !== target
+        this.camera.position.z += CAMERA.MOVE_AMPLITUDE * Math.sin((Math.PI / (((CAMERA.Z - CAMERA.GAME_STOPPED_Z) || Game.ZERO_ERROR_VALUE) * CAMERA.POSITION_MULTIPLIER)) * (this.camera.userData.destination.z - this.camera.position.z));
 
         this.renderer.render(this.scene, this.camera);
         requestAnimationFrame(this.animate.bind(this));
+
+        this.endMenu.showFinalScore && this.endMenu.updateScore();
     }
 
     reset() {
@@ -161,161 +132,18 @@ export default class Game {
         this.movement = 0;
         this.score = 0;
 
-        this.camera.userData.targetY = Game.BLOCK_HEIGHT;
-        this.camera.userData.targetZ = Game.CAMERA_Z;
+        this.camera.userData.destination.set(this.camera.userData.destination.x, Block.HEIGHT, CAMERA.Z);
 
         const removedBlocks = this.blocks.splice(1);
         this.scene.remove(...removedBlocks);
 
         this.movingBlock.visible = true;
-        this.movingBlock.userData.speed = Game.STARTING_MOVE_SPEED;
         this.resetMovingBlock();
+        this.movingBlock.userData.speed = BLOCKS.MOVING.STARTING_SPEED;
 
-        $("#score").text(0);
-        $("#final-score").data("show-score", false);
-
-        this.fadeEndMenu(true);
-    }
-
-    stackBlock() {
-        const {
-            left: l1,
-            right: r1,
-            front: f1,
-            back: b1
-        } = getMeshSides(this.movingBlock);
-
-        const {
-            left: l2,
-            right: r2,
-            front: f2,
-            back: b2
-        } = getMeshSides(this.blocks.slice(-1)[0]);
-
-        const left = THREE.MathUtils.clamp(l1, l2, r2);
-        const right = THREE.MathUtils.clamp(r1, l2, r2);
-        const front = THREE.MathUtils.clamp(f1, b2, f2);
-        const back = THREE.MathUtils.clamp(b1, b2, f2);
-
-        const width = roundToNearest(right - left, Game.FIX_POSITION_VALUE);
-        const depth = roundToNearest(front - back, Game.FIX_POSITION_VALUE);
-
-        this.resetCutOffBlock();
-
-        if ([width, depth].some((val) => val <= 0)) {
-            this.stop();
-
-            return;
-        };
-
-        const block = this.createBlock(width, depth);
-        this.moveBlock(block, left, this.movingBlock.position.y, back);
-        this.blocks.push(block);
-        this.scene.add(block);
-
-        this.movement ^= 2;
-        this.resetMovingBlock();
-
-        this.score += (+!this.cutOffBlock.material.opacity * 2) + 1;
-
-        this.camera.userData.targetY = this.movingBlock.position.y;
-        this.directionalLight.position.y = this.movingBlock.position.y + Game.LIGHT_TRANSLATION_Y;
-
-        $("#score").text(this.score);
-    }
-
-    updateMovingBlock() {
-        const { x, y, z } = this.movingBlock.position;
-        const isDirectionChanging = [x, z].some((val) => Math.abs(val) > 10);
-
-        this.movement ^= +isDirectionChanging;
-
-        const isZMoving = !!(this.movement & 2);
-        const moveMultiplier = (~this.movement & 1) || -1;
-        const moveStep = this.movingBlock.userData.speed * moveMultiplier;
-
-        this.movingBlock.position.set(x + (moveStep * +!isZMoving), y, z + (moveStep * +isZMoving));
-    }
-
-    resetMovingBlock() {
-        const isZMoving = !!(this.movement & 2);
-        const moveMultiplier = (this.movement & 1) || -1;
-
-        const mostTopBlock = this.blocks.slice(-1)[0];
-        const { left, right, back, front } = getMeshSides(mostTopBlock);
-        const width = right - left;
-        const depth = front - back;
-
-        this.moveBlock(this.movingBlock, isZMoving ? left : moveMultiplier * Game.BLOCK_STARTING_WIDTH, mostTopBlock.position.y + Game.BLOCK_HEIGHT, isZMoving ? moveMultiplier * Game.BLOCK_STARTING_DEPTH : back);
-        this.resizeBlock(this.movingBlock, width, depth);
-
-        this.movingBlock.userData.speed += (Game.MAX_MOVE_SPEED - this.movingBlock.userData.speed) / Game.MOVE_DAMPING;
-        this.movingBlock.userData.speed /= 1 + (+!(this.movingBlock.position.y % Game.MOVE_SPEED_DECREASE_INTERVAL) * Game.MOVE_SPEED_DECREASE);
-    }
-
-    updateCutOffBlock() {
-        if (this.cutOffBlock.material.opacity <= 0) return;
-        this.cutOffBlock.position.y -= Game.FALL_SPEED;
-        this.cutOffBlock.material.opacity -= Game.VISIBILITY_DECREASE;
-    }
-
-    resetCutOffBlock() {
-        const isZMoving = !!(this.movement & 2);
-
-        const {
-            left: l1,
-            right: r1,
-            front: f1,
-            back: b1
-        } = getMeshSides(this.movingBlock);
-
-        const {
-            left: l2,
-            right: r2,
-            front: f2,
-            back: b2
-        } = getMeshSides(this.blocks.slice(-1)[0]);
-
-        const left = clampOutside(l1, l2, r2);
-        const right = clampOutside(r1, l2, r2, true);
-        const front = clampOutside(f1, b2, f2, true);
-        const back = clampOutside(b1, b2, f2);
-
-        const width = right - left;
-        const depth = front - back;
-
-        this.moveBlock(this.cutOffBlock, isZMoving ? this.movingBlock.position.x : left, this.movingBlock.position.y, isZMoving ? back : this.movingBlock.position.z);
-        this.resizeBlock(this.cutOffBlock, width, depth);
-
-        this.cutOffBlock.material.opacity = +!!(roundToNearest(width, Game.FIX_POSITION_VALUE) && roundToNearest(depth, Game.FIX_POSITION_VALUE));
-    }
-
-    createBlock(width: number, depth: number) {
-        width = roundToNearest(width, Game.FIX_POSITION_VALUE);
-        depth = roundToNearest(depth, Game.FIX_POSITION_VALUE);
-
-        const geometry = new THREE.BoxGeometry(width, Game.BLOCK_HEIGHT, depth);
-        const material = new THREE.MeshLambertMaterial({ color: Game.BLOCK_COLOR });
-
-        geometry.translate(width / 2, 0, depth / 2);
-
-        return new THREE.Mesh(geometry, material);
-    }
-
-    moveBlock(block: THREE.Mesh, x: number, y: number, z: number) {
-        x = roundToNearest(x, Game.FIX_POSITION_VALUE);
-        y = roundToNearest(y, Game.FIX_POSITION_VALUE);
-        z = roundToNearest(z, Game.FIX_POSITION_VALUE);
-
-        block.position.set(x, y, z);
-    }
-
-    resizeBlock(block: THREE.Mesh, width: number, depth: number) {
-        width = roundToNearest(width, Game.FIX_POSITION_VALUE);
-        depth = roundToNearest(depth, Game.FIX_POSITION_VALUE);
-
-        block.geometry.copy(new THREE.BoxGeometry(width, Game.BLOCK_HEIGHT, depth));
-        block.geometry.translate(width / 2, 0, depth / 2);
+        this.scoreElement.text(0).delay(Game.SCORE_FADE_IN_DELAY).css("display", "inline").animate({ opacity: 1 }, Game.SCORE_FADE_DURATION);;
+        
+        this.endMenu.fadeOut().showFinalScore = false;
     }
 
     stop() {
@@ -323,16 +151,15 @@ export default class Game {
         this.movingBlock.visible = false;
 
         setTimeout(() => {
-            this.camera.userData.targetZ = Game.CAMERA_GAME_OVER_Z;
+            this.camera.userData.destination.z = CAMERA.GAME_STOPPED_Z;
 
-            setTimeout(() => {
-                this.fadeEndMenu();
+            this.scoreElement.delay(Game.SCORE_FADE_OUT_DELAY).animate({ opacity: 0 }, Game.SCORE_FADE_DURATION, function() {
+                $(this).css("display", "none");
+            });
 
-                $("#final-score").delay(Game.FADE_DELAY + Game.FINAL_SCORE_DELAY).data({
-                    showScore: true,
-                    unrounded: 0
-                });      
-            }, Game.END_SCREEN_FADE_IN);
+            this.endMenu.fadeIn().showFinalScore = true;
+            this.endMenu.scoreCounter = 0;
+            this.endMenu.targetScore = this.score;
         }, Game.STOP_GAME_DELAY);
     }
 
@@ -343,35 +170,182 @@ export default class Game {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    fadeWhenFirst() {
-        $("#start-menu").animate({ opacity: 0 }, Game.FADE_DURATION, function () {
-            $(this).css("display", "none");
-        });
+    stackBlock() {
+        if (this.gameOver) return;
 
-        $("#score").delay(Game.FADE_DELAY).css("display", "inline").animate({ opacity: 1 }, Game.FADE_DURATION);
+        if (!this.score) {
+            this.startMenu.fadeOut();
+            this.scoreElement.delay(Game.SCORE_FADE_IN_DELAY).css("display", "inline").animate({ opacity: 1 }, Game.SCORE_FADE_DURATION);
+        }
+        
+        this.addBlockToStack();
+
+        if (this.gameOver) {
+            this.supabase.from("leaderboard").select().returns<Leaderboard.Row[]>().then(({ data, error }) => {
+                if (error) {
+                    this.endMenu.leaderboard.text("Unable to load leaderboard. Please try again later.");
+                    return;
+                }
+
+                this.endMenu.updateLeaderboard(data);
+            });
+            // this.supabase.from("leaderboard").select().returns<Leaderboard.Row[]>().then(async ({ data, error }) => {
+            //     if (error || !data) {
+            //         $("#leaderboard").text("Unable to load leaderboard. Please try again later.");
+            //         return;
+            //     }
+
+            //     // console.log(data.find(({ id }) => id === localStorage.getItem("leaderboard-id")))
+
+            //     if (data.find(({ id }) => id === localStorage.getItem("leaderboard-id"))) {
+            //         const { name } = data.find(({ id }) => id === localStorage.getItem("leaderboard-id"))!;
+        
+            //         await this.supabase.from("leaderboard").update({
+            //             name: $("#name").val() || name,
+            //             score: this.score
+            //         }).eq("id", localStorage.getItem("leaderboard-id"));
+            //     } else {
+            //         const name = $("#name").val() || "Player";
+
+            //         this.supabase.from("leaderboard").insert({
+            //             name,
+            //             score: this.score
+            //         }).select().returns<Leaderboard.Row[]>().then(({ data: score }) => {
+            //             data.push(score![0]);
+
+            //             localStorage.setItem("leaderboard-id", score![0].id);
+            //         });
+            //     }
+
+            //     for (const { name, score } of data) {
+            //         $("<span>").append($("<p>").text(name).attr("id", "name"), $("<p>").text(score).attr("id", "score")).appendTo("#leaderboard")
+            //     }
+            // });
+        
+            this.stop();
+            return;
+        }
+
+        this.score += (+!this.cutOffBlock.material.opacity * 2) + 1;
+        this.scoreElement.text(this.score);
+
+        this.camera.userData.destination.y = this.movingBlock.position.y;
+        this.directionalLight.position.y = this.movingBlock.position.y + LIGHTS.DIRECTIONAL.TRANSLATION_Y;
     }
 
-    fadeEndMenu(fadeOut: boolean = false) {
-        $("#end-menu").stop(true).delay((1 - +fadeOut) * Game.FADE_DELAY).animate({ opacity: 1 - +fadeOut }, {
-            duration: Game.FADE_DURATION,
-            start() {
-                !fadeOut && $(this).css("display", "flex");
-            },
+    addBlockToStack() {
+        const {
+            left: l1,
+            right: r1,
+            front: f1,
+            back: b1
+        } = this.movingBlock.getBoundingBox();
+        const {
+            left: l2,
+            right: r2,
+            front: f2,
+            back: b2
+        } = this.blocks.slice(-1)[0].getBoundingBox();
 
-            done() {
-                fadeOut && $(this).css("display", "none");
-            }
-        });
+        const left = THREE.MathUtils.clamp(l1, l2, r2);
+        const right = THREE.MathUtils.clamp(r1, l2, r2);
+        const front = THREE.MathUtils.clamp(f1, b2, f2);
+        const back = THREE.MathUtils.clamp(b1, b2, f2);
 
-        $("#score").stop(true).delay(+fadeOut * Game.FADE_DELAY).animate({ opacity: +fadeOut }, {
-            duration: Game.FADE_DURATION,
-            start() {
-                fadeOut && $(this).css("display", "inline");
-            },
+        const width = right - left;
+        const depth = front - back;
 
-            done() {
-                !fadeOut && $(this).css("display", "none");
-            }
-        });
+        this.resetCutOffBlock();
+
+        if ([width, depth].some((val) => roundToNearest(val, Block.FIX_VALUE) <= 0)) {
+            this.gameOver = true;
+            return;
+        };
+
+        const block = new Block(width, depth);
+        block.setPosition(left, this.movingBlock.position.y, back);
+        this.blocks.push(block);
+        this.scene.add(block);
+
+        this.movement ^= 2;
+        this.resetMovingBlock();
+    }
+
+    updateMovingBlock() {
+        const { x, z } = this.movingBlock.position;
+        const isZMoving = !!(this.movement & 2);
+        const isDirectionChanging = isZMoving ? (z !== THREE.MathUtils.clamp(z, BLOCKS.MOVING.MIN_Z, BLOCKS.MOVING.MAX_Z)) : (x !== THREE.MathUtils.clamp(x, BLOCKS.MOVING.MIN_X, BLOCKS.MOVING.MAX_X));
+
+        this.movement ^= +isDirectionChanging;
+
+        const moveMultiplier = (~this.movement & 1) || -1;
+        const moveStep = this.movingBlock.userData.speed * moveMultiplier;
+
+        this.movingBlock.position.add(new THREE.Vector3(moveStep * +!isZMoving, 0, moveStep * +isZMoving));
+    }
+
+    resetMovingBlock() {
+        const isZMoving = !!(this.movement & 2);
+        const isReversed = !(this.movement & 1);
+
+        const mostTopBlock = this.blocks.slice(-1)[0];
+        const { left, right, back, front } = mostTopBlock.getBoundingBox();
+        const width = right - left;
+        const depth = front - back;
+
+        this.movingBlock.setPosition(
+            isZMoving
+                ? left
+                : isReversed
+                    ? BLOCKS.MOVING.MAX_X
+                    : BLOCKS.MOVING.MIN_X,
+            mostTopBlock.position.y + Block.HEIGHT,
+            isZMoving
+                ? isReversed
+                    ? BLOCKS.MOVING.MAX_Z
+                    : BLOCKS.MOVING.MIN_Z
+                : back
+        );
+        this.movingBlock.setSize(width, depth);
+
+        this.movingBlock.userData.speed += (BLOCKS.MOVING.MAX_SPEED - this.movingBlock.userData.speed) / BLOCKS.MOVING.SPEED_DAMPING;
+        this.movingBlock.userData.speed /= 1 + (+!(this.score % BLOCKS.MOVING.SPEED_DECREASE_INTERVAL) * BLOCKS.MOVING.SPEED_DECREASE);
+    }
+
+    updateCutOffBlock() {
+        if (this.cutOffBlock.material.opacity <= 0) return;
+        this.cutOffBlock.position.y += BLOCKS.CUTOFF.GRAVITY;
+        this.cutOffBlock.material.opacity -= BLOCKS.CUTOFF.FADE_OUT_SPEED;
+    }
+
+    resetCutOffBlock() {
+        const isZMoving = !!(this.movement & 2);
+
+        const {
+            left: l1,
+            right: r1,
+            front: f1,
+            back: b1
+        } = this.movingBlock.getBoundingBox();
+        
+        const {
+            left: l2,
+            right: r2,
+            front: f2,
+            back: b2
+        } = this.blocks.slice(-1)[0].getBoundingBox();
+
+        const left = clampOutside(l1, l2, r2);
+        const right = clampOutside(r1, l2, r2, true);
+        const front = clampOutside(f1, b2, f2, true);
+        const back = clampOutside(b1, b2, f2);
+
+        const width = right - left;
+        const depth = front - back;
+
+        this.cutOffBlock.setPosition(isZMoving ? this.movingBlock.position.x : left, this.movingBlock.position.y, isZMoving ? back : this.movingBlock.position.z);
+        this.cutOffBlock.setSize(width, depth);
+
+        this.cutOffBlock.material.opacity = +!![width, depth].some((x) => roundToNearest(x, Block.FIX_VALUE));
     }
 }

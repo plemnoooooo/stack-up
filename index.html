@@ -3,24 +3,28 @@
     <head>
         <meta charset="UTF-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>Stack Up</title>
         <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     </head>
     <body>
-        <canvas id="game-canvas"></canvas>
+        <canvas id="canvas"></canvas>
+        <p id="score">0</p>
         <div id="start-menu">
             <img src="/images/logo.svg">
-            <p>Click anywhere to start playing</p>
+            <div>
+                <p>Username</p>
+                <input type="text" id="name" placeholder="Player">
+            </div>
+            <p>Press space or click anywhere to start</p>
         </div>
-        <p id="score">0</p>
         <div id="end-menu">
             <div id="leaderboard"></div>
             <div id="score-texts">
-                <p>Final Score</p>
+                <p>Final score</p>
                 <h1 id="final-score">0</h1>
             </div>
-            <button id="reset">Play Again</button>
+            <button id="reset">Play again</button>
             <a href="https://github.com/plemnoooooo/stack-up" id="repository-link" target="_blank">View repository</a>
         </div>
         <script type="module" src="src/index.ts"></script>
