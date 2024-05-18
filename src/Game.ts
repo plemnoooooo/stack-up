@@ -101,12 +101,13 @@ export default class Game {
         this.ambientLight = new THREE.AmbientLight(LIGHTS.AMBIENT.COLOR, LIGHTS.AMBIENT.INTENSITY);
         this.directionalLight = new THREE.DirectionalLight(LIGHTS.DIRECTIONAL.COLOR, LIGHTS.DIRECTIONAL.INTENSITY);
 
-        this.camera.userData.destination = new THREE.Vector3(CAMERA.X, 0, CAMERA.Z);
-        this.camera.position.copy(this.camera.userData.destination).y = CAMERA.TRANSLATION_Y;
+        this.camera.userData.destination = new THREE.Vector3(CAMERA.X, Block.HEIGHT, CAMERA.Z);
+        this.camera.position.copy(this.camera.userData.destination).y += CAMERA.TRANSLATION_Y;
         this.camera.lookAt(Block.STARTING_WIDTH / 2, Block.HEIGHT, Block.STARTING_DEPTH / 2);
 
-        this.directionalLight.position.set(LIGHTS.DIRECTIONAL.X, LIGHTS.DIRECTIONAL.TRANSLATION_Y, LIGHTS.DIRECTIONAL.Z);
-        this.directionalLight.lookAt(new THREE.Vector3(Block.STARTING_WIDTH / 2, Block.HEIGHT, Block.STARTING_DEPTH / 2));
+        this.directionalLight.userData.destination = new THREE.Vector3(LIGHTS.DIRECTIONAL.X, Block.HEIGHT, LIGHTS.DIRECTIONAL.Z);
+        this.directionalLight.position.copy(this.directionalLight.userData.destination).y += LIGHTS.DIRECTIONAL.TRANSLATION_Y;
+        this.directionalLight.lookAt(new THREE.Vector3(Block.STARTING_WIDTH / 2, Block.HEIGHT, Block.HEIGHT / 2));
 
         this.scene.add(this.ambientLight, this.directionalLight);
 
@@ -120,7 +121,7 @@ export default class Game {
         this.scene.add(startingBlock, this.movingBlock);
 
         $(window).on("keydown", ({ key }) => {
-            (key === Game.KEY_TO_STACK_BLOCK) && this.stackBlock();
+            (!this.startMenu.isOnFocus && (key === Game.KEY_TO_STACK_BLOCK)) && this.stackBlock();
         });
 
         this.canvas.on("pointerdown", this.stackBlock.bind(this));
@@ -146,6 +147,7 @@ export default class Game {
 
         // formula: MOVE_AMPLITUDE * sin((pi / ((target - start) * POSITION_MULTIPLIER)) * (target - current)), start !== target
         this.camera.position.z += CAMERA.MOVE_AMPLITUDE * Math.sin((Math.PI / (((CAMERA.Z - CAMERA.GAME_STOPPED_Z) || Game.ZERO_ERROR_VALUE) * CAMERA.POSITION_MULTIPLIER)) * (this.camera.userData.destination.z - this.camera.position.z));
+        this.directionalLight.position.y += ((this.directionalLight.userData.destination.y + LIGHTS.DIRECTIONAL.TRANSLATION_Y) - this.directionalLight.position.y) / LIGHTS.DIRECTIONAL.DAMPING;
 
         this.updateMovingBlock();
         this.updateCutOffBlock();
@@ -158,10 +160,11 @@ export default class Game {
 
     reset() {
         this.gameOver = false;
-        this.movement = 0;
+        this.movement = THREE.MathUtils.randInt(0b00, 0b11);
         this.score = 0;
 
-        this.camera.userData.destination.set(this.camera.userData.destination.x, Block.HEIGHT, CAMERA.Z);
+        this.camera.userData.destination.set(CAMERA.X, Block.HEIGHT, CAMERA.Z);
+        this.directionalLight.userData.destination.set(LIGHTS.DIRECTIONAL, Block.HEIGHT, LIGHTS.DIRECTIONAL.Z);
 
         this.backgroundHueTarget = new THREE.Color(Game.BACKGROUND_STARTING_COLOR).getHSL({
             h: 0,
@@ -172,9 +175,11 @@ export default class Game {
         const removedBlocks = this.blocks.splice(1);
         this.scene.remove(...removedBlocks);
 
-        this.movingBlock.visible = true;
-        this.resetMovingBlock();
-        this.movingBlock.userData.speed = BLOCKS.MOVING.STARTING_SPEED;
+        setTimeout(() => {
+            this.movingBlock.visible = true;
+            this.resetMovingBlock();
+            this.movingBlock.userData.speed = BLOCKS.MOVING.STARTING_SPEED;
+        }, BLOCKS.MOVING.RESET_DELAY);
 
         this.scoreElement.text(0).delay(Game.SCORE_FADE_IN_DELAY).css("display", "inline").animate({ opacity: 1 }, Game.SCORE_FADE_DURATION);
 
@@ -223,12 +228,12 @@ export default class Game {
                 if (i < 0) i = data.length;
 
                 const row = data[i] || {
-                    name: this.startMenu.getName() || StartMenu.DEFAULT_NAME,
+                    name: this.startMenu.getName(),
                     score: this.score,
                 };
 
-                row.name = this.startMenu.getName() || row.name;
-                row.score = Math.max(this.score, row.score);
+                row.name = this.startMenu.getName(row.name);
+                row.score = Math.max(this.score, row.score, +localStorage.getItem(LOCAL_STORAGE.HIGH_SCORE)!);
 
                 this.endMenu.highScore.text(`Best: ${row.score}`);
                 localStorage.setItem(LOCAL_STORAGE.HIGH_SCORE, `${row.score}`);
@@ -252,10 +257,10 @@ export default class Game {
             return;
         }
 
-        this.backgroundHueTarget += Game.BACKGROUND_HUE_CHANGE;
+        this.backgroundHueTarget += Game.BACKGROUND_HUE_CHANGE * Block.HEIGHT;
 
         this.camera.userData.destination.y = this.movingBlock.position.y;
-        this.directionalLight.position.y = this.movingBlock.position.y + LIGHTS.DIRECTIONAL.TRANSLATION_Y;
+        this.directionalLight.userData.destination.y = this.movingBlock.position.y;
 
         this.score += (+!this.cutOffBlocks.slice(-1)[0].material.opacity * Game.PERFECT_STACK_SCORE_INCREASE) + Game.SCORE_INCREASE;
         this.scoreElement.text(this.score);

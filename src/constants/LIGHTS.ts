@@ -4,7 +4,8 @@ export enum DIRECTIONAL {
 
     X = 24,
     Z = -32,
-    TRANSLATION_Y = 60
+    TRANSLATION_Y = 60,
+    DAMPING = 12
 }
 
 export enum AMBIENT {

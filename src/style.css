@@ -132,7 +132,7 @@ body > div {
     left: 50%;
 
     width: min(72%, 21.6rem);
-    height: min(56%, 28rem);
+    height: min(54%, 27rem);
 
     text-align: center;
 
@@ -155,14 +155,10 @@ body > div {
     position: relative;
 
     width: 100%;
-    height: min(6.4vh, 3.2rem);
+    height: min(6vh, 3rem);
 
     border-width: 0.18rem;
     border-style: none none solid none;
-}
-
-#leaderboard > div:nth-child(1) {
-    background-color: red;
 }
 
 #leaderboard > div:last-child {
@@ -173,7 +169,7 @@ body > div {
     position: absolute;
     top: 50%;
 
-    font-size: min(3vh, 1.5rem);
+    font-size: min(2.4vh, 1.2rem);
     
     transform: translateY(-50%);
 }
@@ -194,7 +190,7 @@ body > div {
 
     flex-direction: column;
 
-    height: min(13.2%, 6.6rem);
+    height: min(14%, 7rem);
 
     text-align: center;
     white-space: nowrap;

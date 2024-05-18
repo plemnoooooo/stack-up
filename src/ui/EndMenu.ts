@@ -23,7 +23,7 @@ export class EndMenu {
     static readonly FADE_IN_DELAY = 360;
     static readonly FADE_OUT_DELAY = 120;
     static readonly UPDATE_AMPLITUDE_DIVIDER = 48;
-    static readonly POSITION_MULTIPLIER = 1.008;
+    static readonly POSITION_MULTIPLIER = 1.0024;
 
     showFinalScore: boolean;
     scoreCounter: number;
