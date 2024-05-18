@@ -13,5 +13,5 @@ To place a block, simply click anywhere on the screen or press the spacebar on y
 ## Libraries used
 
 * [Three.js](https://threejs.org/) (3D rendering library)
-* [JQuery](https://jquery.com/) (UI framework)
+* [jQuery](https://jquery.com/) (UI framework)
 * [Supabase](https:/supabase.com/) (database)
