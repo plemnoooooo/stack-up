@@ -4,6 +4,9 @@
 }
 
 * * {
+    margin: 0;
+    padding: 0;
+
     font-family: "Quicksand";
     color: white;
     text-transform: uppercase;
@@ -17,9 +20,6 @@
 html,
 body {
     overflow: hidden;
-
-    margin: 0;
-    padding: 0;
 }
 
 body > div {
@@ -65,7 +65,7 @@ body > div {
 #start-menu > div {
     display: flex;
     position: absolute;
-    bottom: min(20%, 10rem);
+    bottom: min(16%, 8rem);
     left: 50%;
 
     flex-direction: column;
@@ -77,8 +77,6 @@ body > div {
 }
 
 #start-menu > div > p {
-    height: 0;
-
     font-size: min(1.6vh, 0.8rem);
 }
 
@@ -136,11 +134,14 @@ body > div {
     width: min(72%, 21.6rem);
     height: min(56%, 28rem);
 
+    text-align: center;
+
     border-color: white;
     border-radius: min(3.2vh, 1.6rem);
     border-style: solid;
     border-width: 0.24rem;
 
+    touch-action: manipulation;
     pointer-events: all;
 
     transform: translateX(-50%);
@@ -151,56 +152,88 @@ body > div {
 }
 
 #leaderboard > div {
-    display: flex;
+    position: relative;
 
-    flex-direction: row;
-    justify-content: space-between;
+    width: 100%;
+    height: min(6.4vh, 3.2rem);
 
-    padding: 0 min(2vw, 0.6rem);
+    border-width: 0.18rem;
+    border-style: none none solid none;
+}
 
-    width: min(68vw, 20.4rem);
-    height: min(6vh, 3rem);
+#leaderboard > div:nth-child(1) {
+    background-color: red;
+}
 
-    text-anchor: middle;
+#leaderboard > div:last-child {
+    border-style: none;
 }
 
 #leaderboard > div > p {
-    height: 0;
+    position: absolute;
+    top: 50%;
 
-    font-size: min(3.6vh, 1.8rem);
+    font-size: min(3vh, 1.5rem);
+    
+    transform: translateY(-50%);
 }
 
-#leaderboard > div > h1 {
-    height: 0;
-
-    font-size: min(3.6vh, 1.8rem);
+#leaderboard > div > p:nth-child(1) {
+    left: 2%;
 }
 
-#score-texts {
+#leaderboard > div > p:nth-child(2) {
+    right: 2%;
+}
+
+#end-menu > div:nth-child(2) {
     display: flex;
     position: absolute;
-    bottom: min(24%, 12rem);
+    bottom: min(20%, 10rem);
     left: 50%;
 
     flex-direction: column;
 
-    height: min(9.6vh, 4.8rem);
+    height: min(13.2%, 6.6rem);
 
     text-align: center;
+    white-space: nowrap;
 
     transform: translateX(-50%);
 }
 
-#score-texts > p {
-    height: 0;
+#end-menu > div:nth-child(2) > p:nth-child(1) {
+    position: absolute;
+    top: 0;
+    left: 50%;
 
     font-size: min(2.4vh, 1.2rem);
+
+    transform: translateX(-50%);
 }
 
 #final-score {
-    height: 0;
+    position: absolute;
+    top: min(3vh, 1.5rem);
+    left: 50%;
 
     font-size: min(6vh, 3rem);
+
+    transform: translateX(-50%);
+}
+
+#high-score {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+
+    height: 0;
+
+    background-color: red;
+
+    font-size: min(2.4vh, 1.2rem);
+
+    transform: translateX(-50%);
 }
 
 #reset {
@@ -232,7 +265,9 @@ body > div {
     bottom: 0;
     left: 0;
 
-    font-size: min(1.6%, 0.8rem);
+    font-size: min(1.6vh, 0.8rem);
     text-align: center;
     text-decoration-line: none;
+
+    pointer-events: all;
 }

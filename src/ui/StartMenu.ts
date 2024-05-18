@@ -4,19 +4,22 @@ export class StartMenu {
     static readonly ELEMENT_ID = "#start-menu";
     static readonly NAME_ID = "#name";
 
+    static readonly DEFAULT_NAME = "Player";
+    static readonly INSTRUCTIONS_TEXT = "Press space or click anywhere to start.";
+
     static readonly FADE_DURATION = 720;
     static readonly FADE_DELAY = 120;
 
-    element: JQuery;
-    titleImage: JQuery;
-    name: JQuery;
-    instructions: JQuery;
+    element: JQuery<HTMLDivElement>;
+    name: JQuery<HTMLInputElement>;
+    instructions: JQuery<HTMLParagraphElement>;
 
     constructor() {
         this.element = $(StartMenu.ELEMENT_ID);
-        this.titleImage = this.element.children("img");
         this.name = $(StartMenu.NAME_ID);
         this.instructions = this.element.children("p");
+
+        this.instructions.text(StartMenu.INSTRUCTIONS_TEXT);
     }
 
     getName() {

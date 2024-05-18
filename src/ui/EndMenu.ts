@@ -1,32 +1,39 @@
 import $ from "jquery";
 
-import { numberToHexColorString } from "../utils";
 import Game from "../Game";
+import { LOCAL_STORAGE } from "../constants";
 import { Leaderboard } from "../types";
+import { sortByKey } from "../utils";
 
 export class EndMenu {
     static readonly ELEMENT_ID = "#end-menu";
     static readonly LEADERBOARD_ID = "#leaderboard";
     static readonly FINAL_SCORE_ID = "#final-score";
+    static readonly HIGH_SCORE_ID = "#high-score";
     static readonly RESET_BUTTON_ID = "#reset";
-    static readonly REPOSITORY_LINK_ID = "#repository-link";
+
+    static readonly LEADERBOARD_LOAD_ERROR_TEXT = "Unable to load leaderboard. Please try again later.";
+    static readonly LEADERBOARD_COLORS = [
+        "#c4942b", // gold
+        "#a2aab8", // silver
+        "#7a441a" // bronze
+    ];
 
     static readonly FADE_DURATION = 720;
     static readonly FADE_IN_DELAY = 360;
     static readonly FADE_OUT_DELAY = 120;
-    static readonly HOVER_DURATION = 240;
-    static readonly UPDATE_AMPLITUDE_DIVIDER = 36;
+    static readonly UPDATE_AMPLITUDE_DIVIDER = 48;
     static readonly POSITION_MULTIPLIER = 1.008;
 
     showFinalScore: boolean;
     scoreCounter: number;
     targetScore: number;
 
-    element: JQuery;
-    leaderboard: JQuery;
-    finalScore: JQuery;
-    resetButton: JQuery;
-    repositoryLink: JQuery;
+    element: JQuery<HTMLDivElement>;
+    leaderboard: JQuery<HTMLOListElement>;
+    finalScore: JQuery<HTMLHeadingElement>;
+    highScore: JQuery<HTMLParagraphElement>;
+    resetButton: JQuery<HTMLButtonElement>;
 
     constructor() {
         this.showFinalScore = false;
@@ -36,17 +43,19 @@ export class EndMenu {
         this.element = $(EndMenu.ELEMENT_ID);
         this.leaderboard = $(EndMenu.LEADERBOARD_ID);
         this.finalScore = $(EndMenu.FINAL_SCORE_ID);
+        this.highScore = $(EndMenu.HIGH_SCORE_ID);
         this.resetButton = $(EndMenu.RESET_BUTTON_ID);
-        this.repositoryLink = $(EndMenu.REPOSITORY_LINK_ID);
 
         this.resetButton.on("pointerover", function() {
             $(this).stop(true).css({
-                color: numberToHexColorString(Game.BACKGROUND_COLOR),
+                color: Game.currentBackgroundColorString,
+
                 backgroundColor: "white"
             });
         }).on("pointerout", function()  {
             $(this).stop(true).css({
                 color: "white",
+
                 backgroundColor: "transparent"
             })
         });
@@ -76,9 +85,25 @@ export class EndMenu {
     updateLeaderboard(scores: Leaderboard.Row[]) {
         this.leaderboard.empty();
 
-        for (const { name, score } of scores) {
+        sortByKey("score", scores);
+        scores.reverse();
+
+        console.log(scores);
+
+        for (const i of scores.keys()) {
+            const { id, name, score } = scores[i];
+
             const row = $("<div>");
-            row.append($("<p>").text(name), $("<h1>").text(score));
+            row.css("background-color", EndMenu.LEADERBOARD_COLORS[i] || "transparent").append($("<p>").text(`${i + 1}. ${name}`), $("<p>").text(score));
+
+            (id === localStorage.getItem(LOCAL_STORAGE.LEADERBOARD_ID)) && row.css({
+                position: "sticky",
+                top: 0,
+                bottom: 0,
+                zIndex: 1,
+
+                backgroundColor: "white"
+            }).children().css("color", Game.currentBackgroundColorString);
 
             this.leaderboard.append(row);
         }

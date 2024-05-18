@@ -2,7 +2,7 @@ import * as THREE from "three";
 import $ from "jquery";
 import { createClient } from "@supabase/supabase-js";
 
-import { BLOCKS, CAMERA, LIGHTS } from "./constants";
+import { BLOCKS, CAMERA, LIGHTS, LOCAL_STORAGE } from "./constants";
 import { Supabase, Leaderboard } from "./types";
 import { StartMenu, EndMenu } from "./ui";
 import { clampOutside, roundToNearest } from "./utils";
@@ -12,15 +12,24 @@ export default class Game {
     static readonly CANVAS_ID = "#canvas"
     static readonly SCORE_ID = "#score";
 
-    static readonly SUPABASE_URL = "https://aekozqymnjeaaxfcppmt.supabase.co/";
-    static readonly BACKGROUND_COLOR = 0x72bed6;
     static readonly KEY_TO_STACK_BLOCK = " ";
+    static readonly SCORE_INCREASE = 1;
+    static readonly PERFECT_STACK_SCORE_INCREASE = 2;
+
+    static readonly SUPABASE_URL = "https://aekozqymnjeaaxfcppmt.supabase.co/";
+    static readonly LEADERBOARD_TABLE_ID = "leaderboard";
+
+    static readonly BACKGROUND_STARTING_COLOR = "#72bed6";
+    static readonly BACKGROUND_HUE_CHANGE = 0.006;
+    static readonly BACKGROUND_HUE_DAMPING = 12;
 
     static readonly ZERO_ERROR_VALUE = 1 ** -5;
     static readonly STOP_GAME_DELAY = 1800;
     static readonly SCORE_FADE_DURATION = 480;
     static readonly SCORE_FADE_IN_DELAY = 400;
     static readonly SCORE_FADE_OUT_DELAY = 120;
+
+    static currentBackgroundColorString: string = this.BACKGROUND_STARTING_COLOR;
 
     gameOver: boolean;
     movement: number;
@@ -35,13 +44,16 @@ export default class Game {
     renderer!: THREE.WebGLRenderer;
     supabase!: Supabase;
 
+    backgroundColor!: THREE.Color;
+    backgroundHueTarget: number;
+
     camera!: THREE.PerspectiveCamera;
     ambientLight!: THREE.AmbientLight;
     directionalLight!: THREE.DirectionalLight;
 
     blocks: Block[];
     movingBlock!: Block;
-    cutOffBlock!: Block;
+    cutOffBlocks: Block[];
 
     constructor() {
         this.gameOver = false;
@@ -53,7 +65,10 @@ export default class Game {
         this.movement = THREE.MathUtils.randInt(0b00, 0b11);
 
         this.score = 0;
+        this.backgroundHueTarget = 0;
+
         this.blocks = [];
+        this.cutOffBlocks = [];
 
         this.init();
         this.animate();
@@ -69,9 +84,15 @@ export default class Game {
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas[0] });
         this.supabase = createClient(Game.SUPABASE_URL, import.meta.env.VITE_SUPABASE_KEY);
 
-        const backgroundColor = new THREE.Color(Game.BACKGROUND_COLOR);
-        this.scene.background = backgroundColor;
-        $("html, body").css("background-color", backgroundColor.getHexString());
+        this.backgroundColor = new THREE.Color(Game.BACKGROUND_STARTING_COLOR);
+        this.backgroundHueTarget = this.backgroundColor.getHSL({
+            h: 0,
+            s: 0,
+            l: 0
+        }).h;
+
+        this.scene.background = this.backgroundColor;
+        $("html, body").css("background-color", `#${this.backgroundColor.getHexString()}`);
 
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         $(window).on("resize", this.resize.bind(this));
@@ -96,30 +117,38 @@ export default class Game {
         this.resetMovingBlock();
         this.movingBlock.userData.speed = BLOCKS.MOVING.STARTING_SPEED;
 
-        this.cutOffBlock = new Block(0, 0);
-        this.cutOffBlock.material.opacity = 0;
-        this.cutOffBlock.material.transparent = true;
+        this.scene.add(startingBlock, this.movingBlock);
 
-        this.scene.add(startingBlock, this.movingBlock, this.cutOffBlock);
-
-        $(window).on("keydown", ({ key, preventDefault }) => {
+        $(window).on("keydown", ({ key }) => {
             (key === Game.KEY_TO_STACK_BLOCK) && this.stackBlock();
-            preventDefault();
         });
 
         this.canvas.on("pointerdown", this.stackBlock.bind(this));
 
+        this.supabase.from(Game.LEADERBOARD_TABLE_ID).select().returns<Leaderboard.Row[]>().then(({ data }) => this.startMenu.name.attr("placeholder", data!.find(({ id }) => (id === localStorage.getItem(LOCAL_STORAGE.LEADERBOARD_ID)))!.name || StartMenu.DEFAULT_NAME));
         this.endMenu.resetButton.on("click", () => this.gameOver && this.reset());
     }
 
     animate() {
-        this.updateMovingBlock();
-        this.updateCutOffBlock();
+        const { h, s, l } = this.backgroundColor.getHSL({
+            h: 0,
+            s: 0,
+            l: 0
+        });
+
+        this.backgroundColor.setHSL(h + ((this.backgroundHueTarget - h) / Game.BACKGROUND_HUE_DAMPING), s, l);
+
+        this.scene.background = this.backgroundColor;
+        $("html, body").css("background-color", `#${this.backgroundColor.getHexString()}`);;
+        Game.currentBackgroundColorString = `#${(this.scene.background as THREE.Color).getHexString()}`;
 
         this.camera.position.y += ((this.camera.userData.destination.y + CAMERA.TRANSLATION_Y) - this.camera.position.y) / CAMERA.DAMPING;
 
         // formula: MOVE_AMPLITUDE * sin((pi / ((target - start) * POSITION_MULTIPLIER)) * (target - current)), start !== target
         this.camera.position.z += CAMERA.MOVE_AMPLITUDE * Math.sin((Math.PI / (((CAMERA.Z - CAMERA.GAME_STOPPED_Z) || Game.ZERO_ERROR_VALUE) * CAMERA.POSITION_MULTIPLIER)) * (this.camera.userData.destination.z - this.camera.position.z));
+
+        this.updateMovingBlock();
+        this.updateCutOffBlock();
 
         this.renderer.render(this.scene, this.camera);
         requestAnimationFrame(this.animate.bind(this));
@@ -134,6 +163,12 @@ export default class Game {
 
         this.camera.userData.destination.set(this.camera.userData.destination.x, Block.HEIGHT, CAMERA.Z);
 
+        this.backgroundHueTarget = new THREE.Color(Game.BACKGROUND_STARTING_COLOR).getHSL({
+            h: 0,
+            s: 0,
+            l: 0
+        }).h;
+
         const removedBlocks = this.blocks.splice(1);
         this.scene.remove(...removedBlocks);
 
@@ -141,8 +176,8 @@ export default class Game {
         this.resetMovingBlock();
         this.movingBlock.userData.speed = BLOCKS.MOVING.STARTING_SPEED;
 
-        this.scoreElement.text(0).delay(Game.SCORE_FADE_IN_DELAY).css("display", "inline").animate({ opacity: 1 }, Game.SCORE_FADE_DURATION);;
-        
+        this.scoreElement.text(0).delay(Game.SCORE_FADE_IN_DELAY).css("display", "inline").animate({ opacity: 1 }, Game.SCORE_FADE_DURATION);
+
         this.endMenu.fadeOut().showFinalScore = false;
     }
 
@@ -153,7 +188,7 @@ export default class Game {
         setTimeout(() => {
             this.camera.userData.destination.z = CAMERA.GAME_STOPPED_Z;
 
-            this.scoreElement.delay(Game.SCORE_FADE_OUT_DELAY).animate({ opacity: 0 }, Game.SCORE_FADE_DURATION, function() {
+            this.scoreElement.delay(Game.SCORE_FADE_OUT_DELAY).animate({ opacity: 0 }, Game.SCORE_FADE_DURATION, function () {
                 $(this).css("display", "none");
             });
 
@@ -177,60 +212,53 @@ export default class Game {
             this.startMenu.fadeOut();
             this.scoreElement.delay(Game.SCORE_FADE_IN_DELAY).css("display", "inline").animate({ opacity: 1 }, Game.SCORE_FADE_DURATION);
         }
-        
+
         this.addBlockToStack();
 
         if (this.gameOver) {
-            this.supabase.from("leaderboard").select().returns<Leaderboard.Row[]>().then(({ data, error }) => {
+            this.supabase.from(Game.LEADERBOARD_TABLE_ID).select().returns<Leaderboard.Row[]>().then(async ({ data, error }) => {
+                data ??= [];
+
+                let i = data.findIndex(({ id }) => id === localStorage.getItem(LOCAL_STORAGE.LEADERBOARD_ID));
+                if (i < 0) i = data.length;
+
+                const row = data[i] || {
+                    name: this.startMenu.getName() || StartMenu.DEFAULT_NAME,
+                    score: this.score,
+                };
+
+                row.name = this.startMenu.getName() || row.name;
+                row.score = Math.max(this.score, row.score);
+
+                this.endMenu.highScore.text(`Best: ${row.score}`);
+                localStorage.setItem(LOCAL_STORAGE.HIGH_SCORE, `${row.score}`);
+
                 if (error) {
-                    this.endMenu.leaderboard.text("Unable to load leaderboard. Please try again later.");
+                    this.endMenu.leaderboard.text(EndMenu.LEADERBOARD_LOAD_ERROR_TEXT);
                     return;
                 }
 
-                this.endMenu.updateLeaderboard(data);
+                this.supabase.from(Game.LEADERBOARD_TABLE_ID).upsert(row).select().returns<Leaderboard.Row[]>().then(({ data: newData }) => {
+                    const row = newData![0];
+                    data[i] = row;
+
+                    localStorage.setItem(LOCAL_STORAGE.LEADERBOARD_ID, row.id);
+
+                    this.endMenu.updateLeaderboard(data);
+                });
             });
-            // this.supabase.from("leaderboard").select().returns<Leaderboard.Row[]>().then(async ({ data, error }) => {
-            //     if (error || !data) {
-            //         $("#leaderboard").text("Unable to load leaderboard. Please try again later.");
-            //         return;
-            //     }
 
-            //     // console.log(data.find(({ id }) => id === localStorage.getItem("leaderboard-id")))
-
-            //     if (data.find(({ id }) => id === localStorage.getItem("leaderboard-id"))) {
-            //         const { name } = data.find(({ id }) => id === localStorage.getItem("leaderboard-id"))!;
-        
-            //         await this.supabase.from("leaderboard").update({
-            //             name: $("#name").val() || name,
-            //             score: this.score
-            //         }).eq("id", localStorage.getItem("leaderboard-id"));
-            //     } else {
-            //         const name = $("#name").val() || "Player";
-
-            //         this.supabase.from("leaderboard").insert({
-            //             name,
-            //             score: this.score
-            //         }).select().returns<Leaderboard.Row[]>().then(({ data: score }) => {
-            //             data.push(score![0]);
-
-            //             localStorage.setItem("leaderboard-id", score![0].id);
-            //         });
-            //     }
-
-            //     for (const { name, score } of data) {
-            //         $("<span>").append($("<p>").text(name).attr("id", "name"), $("<p>").text(score).attr("id", "score")).appendTo("#leaderboard")
-            //     }
-            // });
-        
             this.stop();
             return;
         }
 
-        this.score += (+!this.cutOffBlock.material.opacity * 2) + 1;
-        this.scoreElement.text(this.score);
+        this.backgroundHueTarget += Game.BACKGROUND_HUE_CHANGE;
 
         this.camera.userData.destination.y = this.movingBlock.position.y;
         this.directionalLight.position.y = this.movingBlock.position.y + LIGHTS.DIRECTIONAL.TRANSLATION_Y;
+
+        this.score += (+!this.cutOffBlocks.slice(-1)[0].material.opacity * Game.PERFECT_STACK_SCORE_INCREASE) + Game.SCORE_INCREASE;
+        this.scoreElement.text(this.score);
     }
 
     addBlockToStack() {
@@ -310,12 +338,22 @@ export default class Game {
 
         this.movingBlock.userData.speed += (BLOCKS.MOVING.MAX_SPEED - this.movingBlock.userData.speed) / BLOCKS.MOVING.SPEED_DAMPING;
         this.movingBlock.userData.speed /= 1 + (+!(this.score % BLOCKS.MOVING.SPEED_DECREASE_INTERVAL) * BLOCKS.MOVING.SPEED_DECREASE);
+
+        console.log(this.movingBlock.userData.speed);
     }
 
     updateCutOffBlock() {
-        if (this.cutOffBlock.material.opacity <= 0) return;
-        this.cutOffBlock.position.y += BLOCKS.CUTOFF.GRAVITY;
-        this.cutOffBlock.material.opacity -= BLOCKS.CUTOFF.FADE_OUT_SPEED;
+        for (const cutOffBlock of this.cutOffBlocks) {
+            if (cutOffBlock.material.opacity <= 0) {
+                this.cutOffBlocks = this.cutOffBlocks.filter(({ id }) => id !== cutOffBlock.id);
+                this.scene.remove(cutOffBlock);
+            
+                return;
+            }
+
+            cutOffBlock.position.y += BLOCKS.CUTOFF.GRAVITY;
+            cutOffBlock.material.opacity -= BLOCKS.CUTOFF.FADE_OUT_SPEED;
+        }
     }
 
     resetCutOffBlock() {
@@ -327,7 +365,7 @@ export default class Game {
             front: f1,
             back: b1
         } = this.movingBlock.getBoundingBox();
-        
+
         const {
             left: l2,
             right: r2,
@@ -343,9 +381,12 @@ export default class Game {
         const width = right - left;
         const depth = front - back;
 
-        this.cutOffBlock.setPosition(isZMoving ? this.movingBlock.position.x : left, this.movingBlock.position.y, isZMoving ? back : this.movingBlock.position.z);
-        this.cutOffBlock.setSize(width, depth);
-
-        this.cutOffBlock.material.opacity = +!![width, depth].some((x) => roundToNearest(x, Block.FIX_VALUE));
+        const cutOffBlock = new Block(width, depth);
+        cutOffBlock.setPosition(isZMoving ? this.movingBlock.position.x : left, this.movingBlock.position.y, isZMoving ? back : this.movingBlock.position.z);
+        cutOffBlock.material.opacity = +!![width, depth].every((x) => roundToNearest(x, Block.FIX_VALUE));
+        cutOffBlock.material.transparent = true;
+        
+        this.scene.add(cutOffBlock);
+        this.cutOffBlocks.push(cutOffBlock);
     }
 }
