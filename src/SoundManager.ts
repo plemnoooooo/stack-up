@@ -1,18 +1,21 @@
 export default class SoundManager {
-    sounds: HTMLAudioElement[];
+    sounds: Record<string, HTMLAudioElement[]>
     
     constructor() {
-        this.sounds = [];
+        this.sounds = {};
     }
 
-    playSound(soundSrc: string) {    
-        let sound = this.sounds.find(({ paused }) => paused);
+    loadSound(src: string) {
+        this.sounds[src] ??= [new Audio(src)];
+    }
+
+    playSound(src: string) {
+        let sound = this.sounds[src].find(({ paused }) => paused);
         if (!sound) {
-            sound = new Audio(soundSrc);
-            this.sounds.push(sound);
+            sound = new Audio(src);
+            this.sounds[src].push(sound);
         }
 
-        sound.src = soundSrc;       
-        sound.play()
+        sound.play();
     }
 }

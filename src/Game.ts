@@ -84,6 +84,8 @@ export default class Game {
         this.endMenu = new EndMenu();
         this.soundManager = new SoundManager();
 
+        this.soundManager.loadSound(ASSETS.SOUNDS.STACK_BLOCK);
+
         this.scene = new THREE.Scene();
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas[0] });
         this.supabase = createClient(Game.SUPABASE_URL, import.meta.env.VITE_SUPABASE_KEY);
