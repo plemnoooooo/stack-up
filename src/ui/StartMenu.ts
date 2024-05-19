@@ -1,4 +1,5 @@
 import $ from "jquery";
+import { ASSETS } from "../constants";
 
 export class StartMenu {
     static readonly ELEMENT_ID = "#start-menu";
@@ -13,6 +14,7 @@ export class StartMenu {
     isOnFocus: boolean;
 
     element: JQuery<HTMLDivElement>;
+    logoImage: JQuery<HTMLImageElement>
     name: JQuery<HTMLInputElement>;
     instructions: JQuery<HTMLParagraphElement>;
 
@@ -20,9 +22,11 @@ export class StartMenu {
         this.isOnFocus = false;
 
         this.element = $(StartMenu.ELEMENT_ID);
+        this.logoImage = this.element.children("img");
         this.name = $(StartMenu.NAME_ID);
         this.instructions = this.element.children("p");
-
+        
+        this.logoImage.attr("src", ASSETS.IMAGES.LOGO);
         this.name.on("focusin focusout", ({ type }) => this.isOnFocus = type === "focusin");
         this.instructions.text(StartMenu.INSTRUCTIONS_TEXT);
     }

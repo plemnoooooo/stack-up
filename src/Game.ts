@@ -2,11 +2,13 @@ import * as THREE from "three";
 import $ from "jquery";
 import { createClient } from "@supabase/supabase-js";
 
-import { BLOCKS, CAMERA, LIGHTS, LOCAL_STORAGE } from "./constants";
+import { ASSETS, BLOCKS, CAMERA, LIGHTS, LOCAL_STORAGE } from "./constants";
 import { Supabase, Leaderboard } from "./types";
 import { StartMenu, EndMenu } from "./ui";
 import { clampOutside, roundToNearest } from "./utils";
+
 import Block from "./Block";
+import SoundManager from "./SoundManager";
 
 export default class Game {
     static readonly CANVAS_ID = "#canvas"
@@ -39,6 +41,7 @@ export default class Game {
     scoreElement!: JQuery<HTMLParagraphElement>;
     startMenu!: StartMenu;
     endMenu!: EndMenu;
+    soundManager!: SoundManager;
 
     scene!: THREE.Scene;
     renderer!: THREE.WebGLRenderer;
@@ -79,6 +82,7 @@ export default class Game {
         this.scoreElement = $(Game.SCORE_ID);
         this.startMenu = new StartMenu();
         this.endMenu = new EndMenu();
+        this.soundManager = new SoundManager();
 
         this.scene = new THREE.Scene();
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas[0] });
@@ -257,6 +261,8 @@ export default class Game {
             return;
         }
 
+        this.soundManager.playSound(ASSETS.SOUNDS.STACK_BLOCK);
+
         this.backgroundHueTarget += Game.BACKGROUND_HUE_CHANGE * Block.HEIGHT;
 
         this.camera.userData.destination.y = this.movingBlock.position.y;
@@ -343,8 +349,6 @@ export default class Game {
 
         this.movingBlock.userData.speed += (BLOCKS.MOVING.MAX_SPEED - this.movingBlock.userData.speed) / BLOCKS.MOVING.SPEED_DAMPING;
         this.movingBlock.userData.speed /= 1 + (+!(this.score % BLOCKS.MOVING.SPEED_DECREASE_INTERVAL) * BLOCKS.MOVING.SPEED_DECREASE);
-
-        console.log(this.movingBlock.userData.speed);
     }
 
     updateCutOffBlock() {

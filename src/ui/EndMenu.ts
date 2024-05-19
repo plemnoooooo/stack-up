@@ -88,8 +88,6 @@ export class EndMenu {
         sortByKey("score", scores);
         scores.reverse();
 
-        console.log(scores);
-
         for (const i of scores.keys()) {
             const { id, name, score } = scores[i];
 
