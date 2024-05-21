@@ -1,8 +1,7 @@
 import * as THREE from "three";
 import $ from "jquery";
-import { createClient } from "@supabase/supabase-js";
 
-import { ASSETS, BLOCKS, CAMERA, LIGHTS, LOCAL_STORAGE } from "./constants";
+import { ASSETS, BLOCKS, CAMERA, LIGHTS, LOCAL_STORAGE, SUPABASE } from "./constants";
 import { Supabase, Leaderboard } from "./types";
 import { StartMenu, EndMenu } from "./ui";
 import { clampOutside, roundToNearest } from "./utils";
@@ -17,9 +16,6 @@ export default class Game {
     static readonly KEY_TO_STACK_BLOCK = " ";
     static readonly SCORE_INCREASE = 1;
     static readonly PERFECT_STACK_SCORE_INCREASE = 2;
-
-    static readonly SUPABASE_URL = "https://aekozqymnjeaaxfcppmt.supabase.co/";
-    static readonly LEADERBOARD_TABLE_ID = "leaderboard";
 
     static readonly BACKGROUND_STARTING_COLOR = "#72bed6";
     static readonly BACKGROUND_HUE_CHANGE = 0.006;
@@ -45,7 +41,6 @@ export default class Game {
 
     scene!: THREE.Scene;
     renderer!: THREE.WebGLRenderer;
-    supabase!: Supabase;
 
     backgroundColor!: THREE.Color;
     backgroundHueTarget: number;
@@ -58,7 +53,7 @@ export default class Game {
     movingBlock!: Block;
     cutOffBlocks: Block[];
 
-    constructor() {
+    constructor(public supabase: Supabase) {
         this.gameOver = false;
 
         /** number of bits (small endian) | meaning
@@ -88,7 +83,6 @@ export default class Game {
 
         this.scene = new THREE.Scene();
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas[0] });
-        this.supabase = createClient(Game.SUPABASE_URL, import.meta.env.VITE_SUPABASE_KEY);
 
         this.backgroundColor = new THREE.Color(Game.BACKGROUND_STARTING_COLOR);
         this.backgroundHueTarget = this.backgroundColor.getHSL({
@@ -132,7 +126,7 @@ export default class Game {
 
         this.canvas.on("pointerdown", this.stackBlock.bind(this));
 
-        this.supabase.from(Game.LEADERBOARD_TABLE_ID).select().returns<Leaderboard.Row[]>().then(({ data }) => this.startMenu.name.attr("placeholder", data!.find(({ id }) => (id === localStorage.getItem(LOCAL_STORAGE.LEADERBOARD_ID)))!.name || StartMenu.DEFAULT_NAME));
+        this.supabase.from(SUPABASE.LEADERBOARD_TABLE_ID).select().returns<Leaderboard.Row[]>().then(({ data }) => this.startMenu.name.attr("placeholder", data!.find(({ id }) => (id === localStorage.getItem(LOCAL_STORAGE.LEADERBOARD_ID)))!.name || StartMenu.DEFAULT_NAME));
         this.endMenu.resetButton.on("click", () => this.gameOver && this.reset());
     }
 
@@ -227,7 +221,7 @@ export default class Game {
         this.addBlockToStack();
 
         if (this.gameOver) {
-            this.supabase.from(Game.LEADERBOARD_TABLE_ID).select().returns<Leaderboard.Row[]>().then(async ({ data, error }) => {
+            this.supabase.from(SUPABASE.LEADERBOARD_TABLE_ID).select().returns<Leaderboard.Row[]>().then(async ({ data, error }) => {
                 data ??= [];
 
                 let i = data.findIndex(({ id }) => id === localStorage.getItem(LOCAL_STORAGE.LEADERBOARD_ID));
@@ -249,7 +243,7 @@ export default class Game {
                     return;
                 }
 
-                this.supabase.from(Game.LEADERBOARD_TABLE_ID).upsert(row).select().returns<Leaderboard.Row[]>().then(({ data: newData }) => {
+                this.supabase.from(SUPABASE.LEADERBOARD_TABLE_ID).upsert(row).select().returns<Leaderboard.Row[]>().then(({ data: newData }) => {
                     const row = newData![0];
                     data[i] = row;
 

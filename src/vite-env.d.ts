@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
     readonly VITE_SUPABASE_KEY: string;
+    readonly SUPABASE_KEY: string;
 }
 
 interface ImportMeta {
