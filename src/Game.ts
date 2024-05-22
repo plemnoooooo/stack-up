@@ -190,6 +190,38 @@ export default class Game {
         this.gameOver = true;
         this.movingBlock.visible = false;
 
+        this.supabase.from(SUPABASE.LEADERBOARD_TABLE_ID).select().returns<Leaderboard.Row[]>().then(async ({ data, error }) => {
+            data ??= [];
+
+            let i = data.findIndex(({ id }) => id === localStorage.getItem(LOCAL_STORAGE.LEADERBOARD_ID));
+            if (i < 0) i = data.length;
+
+            const row = data[i] || {
+                name: this.startMenu.getName(),
+                score: this.score,
+            };
+
+            row.name = this.startMenu.getName(row.name);
+            row.score = Math.max(this.score, row.score, +localStorage.getItem(LOCAL_STORAGE.HIGH_SCORE)!);
+
+            this.endMenu.highScore.text(`Best: ${row.score}`);
+            localStorage.setItem(LOCAL_STORAGE.HIGH_SCORE, `${row.score}`);
+
+            if (error) {
+                this.endMenu.leaderboard.text(EndMenu.LEADERBOARD_LOAD_ERROR_TEXT);
+                return;
+            }
+
+            this.supabase.from(SUPABASE.LEADERBOARD_TABLE_ID).upsert(row).select().returns<Leaderboard.Row[]>().then(({ data: newData }) => {
+                const row = newData![0];
+                data[i] = row;
+
+                localStorage.setItem(LOCAL_STORAGE.LEADERBOARD_ID, row.id);
+
+                this.endMenu.updateLeaderboard(data);
+            });
+        });
+
         setTimeout(() => {
             this.camera.userData.destination.z = CAMERA.GAME_STOPPED_Z;
 
@@ -218,46 +250,13 @@ export default class Game {
             this.scoreElement.delay(Game.SCORE_FADE_IN_DELAY).css("display", "inline").animate({ opacity: 1 }, Game.SCORE_FADE_DURATION);
         }
 
+        this.resetCutOffBlock();
         this.addBlockToStack();
 
-        if (this.gameOver) {
-            this.supabase.from(SUPABASE.LEADERBOARD_TABLE_ID).select().returns<Leaderboard.Row[]>().then(async ({ data, error }) => {
-                data ??= [];
-
-                let i = data.findIndex(({ id }) => id === localStorage.getItem(LOCAL_STORAGE.LEADERBOARD_ID));
-                if (i < 0) i = data.length;
-
-                const row = data[i] || {
-                    name: this.startMenu.getName(),
-                    score: this.score,
-                };
-
-                row.name = this.startMenu.getName(row.name);
-                row.score = Math.max(this.score, row.score, +localStorage.getItem(LOCAL_STORAGE.HIGH_SCORE)!);
-
-                this.endMenu.highScore.text(`Best: ${row.score}`);
-                localStorage.setItem(LOCAL_STORAGE.HIGH_SCORE, `${row.score}`);
-
-                if (error) {
-                    this.endMenu.leaderboard.text(EndMenu.LEADERBOARD_LOAD_ERROR_TEXT);
-                    return;
-                }
-
-                this.supabase.from(SUPABASE.LEADERBOARD_TABLE_ID).upsert(row).select().returns<Leaderboard.Row[]>().then(({ data: newData }) => {
-                    const row = newData![0];
-                    data[i] = row;
-
-                    localStorage.setItem(LOCAL_STORAGE.LEADERBOARD_ID, row.id);
-
-                    this.endMenu.updateLeaderboard(data);
-                });
-            });
-
-            this.stop();
-            return;
-        }
-
-        this.soundManager.playSound(ASSETS.SOUNDS.STACK_BLOCK);
+        if (this.gameOver) return;
+        
+        this.movement ^= 0b10;
+        this.resetMovingBlock();
 
         this.backgroundHueTarget += Game.BACKGROUND_HUE_CHANGE * Block.HEIGHT;
 
@@ -266,6 +265,8 @@ export default class Game {
 
         this.score += (+!this.cutOffBlocks.slice(-1)[0].material.opacity * Game.PERFECT_STACK_SCORE_INCREASE) + Game.SCORE_INCREASE;
         this.scoreElement.text(this.score);
+
+        this.soundManager.playSound(ASSETS.SOUNDS.STACK_BLOCK);
     }
 
     addBlockToStack() {
@@ -290,10 +291,8 @@ export default class Game {
         const width = right - left;
         const depth = front - back;
 
-        this.resetCutOffBlock();
-
         if ([width, depth].some((val) => roundToNearest(val, Block.FIX_VALUE) <= 0)) {
-            this.gameOver = true;
+            this.stop();
             return;
         };
 
@@ -301,9 +300,6 @@ export default class Game {
         block.setPosition(left, this.movingBlock.position.y, back);
         this.blocks.push(block);
         this.scene.add(block);
-
-        this.movement ^= 2;
-        this.resetMovingBlock();
     }
 
     updateMovingBlock() {
