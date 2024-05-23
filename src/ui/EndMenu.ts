@@ -1,9 +1,9 @@
 import $ from "jquery";
 
-import Game from "../Game";
 import { LOCAL_STORAGE } from "../constants";
 import { Leaderboard } from "../types";
 import { sortByKey } from "../utils";
+import Game from "../Game";
 
 export class EndMenu {
     static readonly ELEMENT_ID = "#end-menu";
@@ -28,6 +28,7 @@ export class EndMenu {
     showFinalScore: boolean;
     scoreCounter: number;
     targetScore: number;
+    textHoverColorString: string;
 
     element: JQuery<HTMLDivElement>;
     leaderboard: JQuery<HTMLOListElement>;
@@ -39,6 +40,7 @@ export class EndMenu {
         this.showFinalScore = false;
         this.scoreCounter = 0;
         this.targetScore = 0;
+        this.textHoverColorString = Game.BACKGROUND_STARTING_COLOR;
 
         this.element = $(EndMenu.ELEMENT_ID);
         this.leaderboard = $(EndMenu.LEADERBOARD_ID);
@@ -46,9 +48,9 @@ export class EndMenu {
         this.highScore = $(EndMenu.HIGH_SCORE_ID);
         this.resetButton = $(EndMenu.RESET_BUTTON_ID);
 
-        this.resetButton.on("pointerover", function() {
-            $(this).stop(true).css({
-                color: Game.currentBackgroundColorString,
+        this.resetButton.on("pointerover", () => {
+            this.resetButton.stop(true).css({
+                color: this.textHoverColorString,
 
                 backgroundColor: "white"
             });
@@ -101,7 +103,7 @@ export class EndMenu {
                 zIndex: 1,
 
                 backgroundColor: "white"
-            }).children().css("color", Game.currentBackgroundColorString);
+            }).children().css("color", this.textHoverColorString);
 
             this.leaderboard.append(row);
         }

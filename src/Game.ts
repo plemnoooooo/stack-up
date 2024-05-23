@@ -4,7 +4,7 @@ import $ from "jquery";
 import { ASSETS, BLOCKS, CAMERA, LIGHTS, LOCAL_STORAGE, SUPABASE } from "./constants";
 import { Supabase, Leaderboard } from "./types";
 import { StartMenu, EndMenu } from "./ui";
-import { clampOutside, roundToNearest } from "./utils";
+import { clampOutside, colorToHSL, roundToNearest } from "./utils";
 
 import Block from "./Block";
 import SoundManager from "./SoundManager";
@@ -27,8 +27,6 @@ export default class Game {
     static readonly SCORE_FADE_IN_DELAY = 400;
     static readonly SCORE_FADE_OUT_DELAY = 120;
 
-    static currentBackgroundColorString: string = this.BACKGROUND_STARTING_COLOR;
-
     gameOver: boolean;
     movement: number;
     score: number;
@@ -38,12 +36,13 @@ export default class Game {
     startMenu!: StartMenu;
     endMenu!: EndMenu;
     soundManager!: SoundManager;
-
+    
     scene!: THREE.Scene;
     renderer!: THREE.WebGLRenderer;
 
     backgroundColor!: THREE.Color;
-    backgroundHueTarget: number;
+    backgroundCurrentHue!: number;
+    backgroundHueTarget!: number;
 
     camera!: THREE.PerspectiveCamera;
     ambientLight!: THREE.AmbientLight;
@@ -63,7 +62,6 @@ export default class Game {
         this.movement = THREE.MathUtils.randInt(0b00, 0b11);
 
         this.score = 0;
-        this.backgroundHueTarget = 0;
 
         this.blocks = [];
         this.cutOffBlocks = [];
@@ -85,11 +83,8 @@ export default class Game {
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas[0] });
 
         this.backgroundColor = new THREE.Color(Game.BACKGROUND_STARTING_COLOR);
-        this.backgroundHueTarget = this.backgroundColor.getHSL({
-            h: 0,
-            s: 0,
-            l: 0
-        }).h;
+        this.backgroundCurrentHue = colorToHSL(this.backgroundColor).h
+        this.backgroundHueTarget = this.backgroundCurrentHue;
 
         this.scene.background = this.backgroundColor;
         $("html, body").css("background-color", `#${this.backgroundColor.getHexString()}`);
@@ -126,23 +121,18 @@ export default class Game {
 
         this.canvas.on("pointerdown", this.stackBlock.bind(this));
 
-        this.supabase.from(SUPABASE.LEADERBOARD_TABLE_ID).select().returns<Leaderboard.Row[]>().then(({ data }) => this.startMenu.name.attr("placeholder", data!.find(({ id }) => (id === localStorage.getItem(LOCAL_STORAGE.LEADERBOARD_ID)))!.name || StartMenu.DEFAULT_NAME));
+        this.startMenu.name.attr("placeholder", localStorage.getItem(LOCAL_STORAGE.NAME) || StartMenu.DEFAULT_NAME);
         this.endMenu.resetButton.on("click", () => this.gameOver && this.reset());
     }
 
     animate() {
-        const { h, s, l } = this.backgroundColor.getHSL({
-            h: 0,
-            s: 0,
-            l: 0
-        });
-
-        this.backgroundColor.setHSL(h + ((this.backgroundHueTarget - h) / Game.BACKGROUND_HUE_DAMPING), s, l);
-
+        const { s, l } = colorToHSL(this.backgroundColor);
+        this.backgroundCurrentHue += (this.backgroundHueTarget - this.backgroundCurrentHue) / Game.BACKGROUND_HUE_DAMPING;
+        
+        this.backgroundColor.setHSL(this.backgroundCurrentHue, s, l);
         this.scene.background = this.backgroundColor;
-        $("html, body").css("background-color", `#${this.backgroundColor.getHexString()}`);;
-        Game.currentBackgroundColorString = `#${(this.scene.background as THREE.Color).getHexString()}`;
-
+        $("html, body").css("background-color", `#${this.backgroundColor.getHexString()}`);
+        
         this.camera.position.y += ((this.camera.userData.destination.y + CAMERA.TRANSLATION_Y) - this.camera.position.y) / CAMERA.DAMPING;
 
         // formula: MOVE_AMPLITUDE * sin((pi / ((target - start) * POSITION_MULTIPLIER)) * (target - current)), start !== target
@@ -166,11 +156,7 @@ export default class Game {
         this.camera.userData.destination.set(CAMERA.X, Block.HEIGHT, CAMERA.Z);
         this.directionalLight.userData.destination.set(LIGHTS.DIRECTIONAL, Block.HEIGHT, LIGHTS.DIRECTIONAL.Z);
 
-        this.backgroundHueTarget = new THREE.Color(Game.BACKGROUND_STARTING_COLOR).getHSL({
-            h: 0,
-            s: 0,
-            l: 0
-        }).h;
+        this.backgroundHueTarget = colorToHSL(new THREE.Color(Game.BACKGROUND_STARTING_COLOR)).h;
 
         const removedBlocks = this.blocks.splice(1);
         this.scene.remove(...removedBlocks);
@@ -206,6 +192,7 @@ export default class Game {
 
             this.endMenu.highScore.text(`Best: ${row.score}`);
             localStorage.setItem(LOCAL_STORAGE.HIGH_SCORE, `${row.score}`);
+            localStorage.setItem(LOCAL_STORAGE.NAME, `${row.name}`);
 
             if (error) {
                 this.endMenu.leaderboard.text(EndMenu.LEADERBOARD_LOAD_ERROR_TEXT);
@@ -232,6 +219,7 @@ export default class Game {
             this.endMenu.fadeIn().showFinalScore = true;
             this.endMenu.scoreCounter = 0;
             this.endMenu.targetScore = this.score;
+            this.endMenu.textHoverColorString = `#${this.backgroundColor.getHexString()}`;
         }, Game.STOP_GAME_DELAY);
     }
 
@@ -340,7 +328,7 @@ export default class Game {
         this.movingBlock.setSize(width, depth);
 
         this.movingBlock.userData.speed += (BLOCKS.MOVING.MAX_SPEED - this.movingBlock.userData.speed) / BLOCKS.MOVING.SPEED_DAMPING;
-        this.movingBlock.userData.speed /= 1 + (+!(this.score % BLOCKS.MOVING.SPEED_DECREASE_INTERVAL) * BLOCKS.MOVING.SPEED_DECREASE);
+        this.movingBlock.userData.speed /= 1 + (+!((this.movingBlock.position.y / Block.HEIGHT) % BLOCKS.MOVING.SPEED_DECREASE_INTERVAL) * BLOCKS.MOVING.SPEED_DECREASE);
     }
 
     updateCutOffBlock() {
