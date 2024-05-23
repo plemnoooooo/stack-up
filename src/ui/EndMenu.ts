@@ -28,7 +28,6 @@ export class EndMenu {
     showFinalScore: boolean;
     scoreCounter: number;
     targetScore: number;
-    textHoverColorString: string;
 
     element: JQuery<HTMLDivElement>;
     leaderboard: JQuery<HTMLOListElement>;
@@ -40,7 +39,6 @@ export class EndMenu {
         this.showFinalScore = false;
         this.scoreCounter = 0;
         this.targetScore = 0;
-        this.textHoverColorString = Game.BACKGROUND_STARTING_COLOR;
 
         this.element = $(EndMenu.ELEMENT_ID);
         this.leaderboard = $(EndMenu.LEADERBOARD_ID);
@@ -48,19 +46,15 @@ export class EndMenu {
         this.highScore = $(EndMenu.HIGH_SCORE_ID);
         this.resetButton = $(EndMenu.RESET_BUTTON_ID);
 
-        this.resetButton.on("pointerover", () => {
-            this.resetButton.stop(true).css({
-                color: this.textHoverColorString,
-
-                backgroundColor: "white"
-            });
-        }).on("pointerout", function()  {
+        this.resetButton.on("pointerout", function()  {
             $(this).stop(true).css({
                 color: "white",
 
                 backgroundColor: "transparent"
             })
         });
+
+        this.setHoverTextColor(Game.BACKGROUND_STARTING_COLOR);
     }
 
     fadeIn(duration: number = EndMenu.FADE_DURATION, delay: number = EndMenu.FADE_IN_DELAY) {
@@ -74,6 +68,16 @@ export class EndMenu {
         });
 
         return this;
+    }
+
+    setHoverTextColor(color: string) {
+        this.resetButton.off("pointerover").on("pointerover", function() {
+            $(this).stop(true).css({ color, backgroundColor: "white" });
+        });
+
+        this.leaderboard.children().each(function () {
+            ($(this).css("position") === "sticky") && $(this).children().css("color", color);
+        });
     }
 
     updateScore() {
@@ -103,7 +107,7 @@ export class EndMenu {
                 zIndex: 1,
 
                 backgroundColor: "white"
-            }).children().css("color", this.textHoverColorString);
+            });
 
             this.leaderboard.append(row);
         }

@@ -219,7 +219,7 @@ export default class Game {
             this.endMenu.fadeIn().showFinalScore = true;
             this.endMenu.scoreCounter = 0;
             this.endMenu.targetScore = this.score;
-            this.endMenu.textHoverColorString = `#${this.backgroundColor.getHexString()}`;
+            this.endMenu.setHoverTextColor(`#${this.backgroundColor.getHexString()}`);
         }, Game.STOP_GAME_DELAY);
     }
 
