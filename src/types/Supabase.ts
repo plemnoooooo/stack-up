@@ -4,7 +4,7 @@ import { Leaderboard } from ".";
 export type Supabase = SupabaseClient<{
     public: {
         Tables: {
-            leaderboard: typeof Leaderboard  ;
+            leaderboard: typeof Leaderboard;
         }
     }
 }>
