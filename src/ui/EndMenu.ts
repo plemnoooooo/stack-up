@@ -30,7 +30,7 @@ export class EndMenu {
     targetScore: number;
 
     element: JQuery<HTMLDivElement>;
-    leaderboard: JQuery<HTMLOListElement>;
+    leaderboard: JQuery<HTMLDivElement>;
     finalScore: JQuery<HTMLHeadingElement>;
     highScore: JQuery<HTMLParagraphElement>;
     resetButton: JQuery<HTMLButtonElement>;
